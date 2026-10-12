@@ -36,7 +36,6 @@ export const initialSettings: StoreSettings = {
   logoUrl: '',
   themeColor: '#d4922a',
   tagline: 'للتجارة العامة',
-}; lastSyncTime: new Date().toISOString(),
 };
 
 // ============================================================
