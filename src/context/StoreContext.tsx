@@ -190,6 +190,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [staff] = useState<UserStaff[]>(() => loadStored(STORAGE_KEYS.STAFF, initialStaff));
   const [currentStaff, setCurrentStaff] = useState<UserStaff>(staff[0]);
   const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
 
   // ✅ المخازن: حالة قابلة للتعديل (بدل useState للقراءة فقط)
   const [warehouses, setWarehouses] = useState<Warehouse[]>(() =>
