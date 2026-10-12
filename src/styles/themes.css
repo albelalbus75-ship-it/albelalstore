@@ -1,0 +1,255 @@
+/* ============================================================
+   نظام الثيمات - Themes System
+   يعتمد على CSS Variables لتطبيق الثيم على كل الواجهة
+   ============================================================ */
+
+:root {
+  /* Thème افتراضي: "الذهبي الفاخر" */
+  --theme-primary: #d4922a;
+  --theme-primary-light: #e6ad3b;
+  --theme-primary-dark: #b87320;
+  --theme-primary-darker: #93561d;
+  --theme-primary-soft: #3a1d0c;
+
+  --theme-bg-primary: #050505;
+  --theme-bg-secondary: #0f0f0f;
+  --theme-bg-tertiary: #1a1a1a;
+  --theme-bg-elevated: #262626;
+
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #cbd5e1;
+  --theme-text-muted: #64748b;
+
+  --theme-border: rgba(212, 146, 42, 0.2);
+  --theme-border-strong: rgba(212, 146, 42, 0.5);
+
+  --theme-glow: rgba(212, 146, 42, 0.4);
+  --theme-glow-strong: rgba(212, 146, 42, 0.6);
+
+  --theme-gradient-from: #d4922a;
+  --theme-gradient-to: #b87320;
+
+  --theme-success: #10b981;
+  --theme-danger: #ef4444;
+  --theme-warning: #f59e0b;
+  --theme-info: #0ea5e9;
+}
+
+/* ============================================================
+   الثيمات الجاهزة - Preset Themes
+   ============================================================ */
+
+/* 1. الذهبي الفاخر (افتراضي) */
+[data-theme="gold"] {
+  --theme-primary: #d4922a;
+  --theme-primary-light: #e6ad3b;
+  --theme-primary-dark: #b87320;
+  --theme-primary-darker: #93561d;
+  --theme-primary-soft: #3a1d0c;
+  --theme-bg-primary: #050505;
+  --theme-bg-secondary: #0f0f0f;
+  --theme-bg-tertiary: #1a1a1a;
+  --theme-bg-elevated: #262626;
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #cbd5e1;
+  --theme-border: rgba(212, 146, 42, 0.2);
+  --theme-border-strong: rgba(212, 146, 42, 0.5);
+  --theme-glow: rgba(212, 146, 42, 0.4);
+  --theme-gradient-from: #d4922a;
+  --theme-gradient-to: #b87320;
+}
+
+/* 2. الزمردي الملكي */
+[data-theme="emerald"] {
+  --theme-primary: #10b981;
+  --theme-primary-light: #34d399;
+  --theme-primary-dark: #059669;
+  --theme-primary-darker: #047857;
+  --theme-primary-soft: #022c22;
+  --theme-bg-primary: #021712;
+  --theme-bg-secondary: #042f24;
+  --theme-bg-tertiary: #064e3b;
+  --theme-bg-elevated: #065f46;
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #d1fae5;
+  --theme-border: rgba(16, 185, 129, 0.25);
+  --theme-border-strong: rgba(16, 185, 129, 0.5);
+  --theme-glow: rgba(16, 185, 129, 0.4);
+  --theme-gradient-from: #10b981;
+  --theme-gradient-to: #059669;
+}
+
+/* 3. الأزرق الملكي */
+[data-theme="royal-blue"] {
+  --theme-primary: #3b82f6;
+  --theme-primary-light: #60a5fa;
+  --theme-primary-dark: #2563eb;
+  --theme-primary-darker: #1d4ed8;
+  --theme-primary-soft: #172554;
+  --theme-bg-primary: #020617;
+  --theme-bg-secondary: #0c1526;
+  --theme-bg-tertiary: #1e3a8a;
+  --theme-bg-elevated: #1e40af;
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #dbeafe;
+  --theme-border: rgba(59, 130, 246, 0.25);
+  --theme-border-strong: rgba(59, 130, 246, 0.5);
+  --theme-glow: rgba(59, 130, 246, 0.4);
+  --theme-gradient-from: #3b82f6;
+  --theme-gradient-to: #2563eb;
+}
+
+/* 4. البنفسجي الفاخر */
+[data-theme="purple"] {
+  --theme-primary: #a855f7;
+  --theme-primary-light: #c084fc;
+  --theme-primary-dark: #9333ea;
+  --theme-primary-darker: #7e22ce;
+  --theme-primary-soft: #2e1065;
+  --theme-bg-primary: #0a0118;
+  --theme-bg-secondary: #1e1033;
+  --theme-bg-tertiary: #3b0764;
+  --theme-bg-elevated: #581c87;
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #e9d5ff;
+  --theme-border: rgba(168, 85, 247, 0.25);
+  --theme-border-strong: rgba(168, 85, 247, 0.5);
+  --theme-glow: rgba(168, 85, 247, 0.4);
+  --theme-gradient-from: #a855f7;
+  --theme-gradient-to: #9333ea;
+}
+
+/* 5. الأحمر الياقوتي */
+[data-theme="ruby"] {
+  --theme-primary: #ef4444;
+  --theme-primary-light: #f87171;
+  --theme-primary-dark: #dc2626;
+  --theme-primary-darker: #b91c1c;
+  --theme-primary-soft: #450a0a;
+  --theme-bg-primary: #180202;
+  --theme-bg-secondary: #2a0a0a;
+  --theme-bg-tertiary: #7f1d1d;
+  --theme-bg-elevated: #991b1b;
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #fee2e2;
+  --theme-border: rgba(239, 68, 68, 0.25);
+  --theme-border-strong: rgba(239, 68, 68, 0.5);
+  --theme-glow: rgba(239, 68, 68, 0.4);
+  --theme-gradient-from: #ef4444;
+  --theme-gradient-to: #dc2626;
+}
+
+/* 6. الفيروزي (Teal) */
+[data-theme="teal"] {
+  --theme-primary: #14b8a6;
+  --theme-primary-light: #2dd4bf;
+  --theme-primary-dark: #0d9488;
+  --theme-primary-darker: #0f766e;
+  --theme-primary-soft: #042f2e;
+  --theme-bg-primary: #011413;
+  --theme-bg-secondary: #042f2e;
+  --theme-bg-tertiary: #134e4a;
+  --theme-bg-elevated: #115e59;
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #ccfbf1;
+  --theme-border: rgba(20, 184, 166, 0.25);
+  --theme-border-strong: rgba(20, 184, 166, 0.5);
+  --theme-glow: rgba(20, 184, 166, 0.4);
+  --theme-gradient-from: #14b8a6;
+  --theme-gradient-to: #0d9488;
+}
+
+/* ============================================================
+   تطبيق الثيمات على العناصر
+   ============================================================ */
+
+body {
+  background-color: var(--theme-bg-primary);
+  color: var(--theme-text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.theme-bg { background-color: var(--theme-bg-primary); }
+.theme-bg-secondary { background-color: var(--theme-bg-secondary); }
+.theme-bg-tertiary { background-color: var(--theme-bg-tertiary); }
+.theme-bg-elevated { background-color: var(--theme-bg-elevated); }
+
+.theme-text { color: var(--theme-text-primary); }
+.theme-text-secondary { color: var(--theme-text-secondary); }
+.theme-text-muted { color: var(--theme-text-muted); }
+.theme-text-primary { color: var(--theme-primary); }
+
+.theme-border { border-color: var(--theme-border); }
+.theme-border-strong { border-color: var(--theme-border-strong); }
+
+.theme-gradient {
+  background: linear-gradient(135deg, var(--theme-gradient-from) 0%, var(--theme-gradient-to) 100%);
+}
+
+.theme-text-gradient {
+  background: linear-gradient(135deg, var(--theme-primary-light) 0%, var(--theme-primary) 50%, var(--theme-primary-dark) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.theme-btn {
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-dark) 100%);
+  color: var(--theme-bg-primary);
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.theme-btn:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 8px 24px -8px var(--theme-glow-strong);
+}
+
+.theme-shadow {
+  box-shadow: 0 4px 20px -4px var(--theme-glow);
+}
+
+.theme-shadow-strong {
+  box-shadow: 0 8px 32px -8px var(--theme-glow-strong);
+}
+
+.theme-card {
+  background: linear-gradient(135deg, var(--theme-bg-secondary), var(--theme-bg-primary));
+  border: 1px solid var(--theme-border);
+  border-radius: 1rem;
+  transition: all 0.25s ease;
+}
+
+.theme-card:hover {
+  border-color: var(--theme-border-strong);
+  box-shadow: 0 4px 20px -4px var(--theme-glow);
+}
+
+/* عناصر إضافية */
+.theme-pulse {
+  animation: theme-pulse 2s ease-in-out infinite;
+}
+
+@keyframes theme-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ============================================================
+   تحسينات عامة
+   ============================================================ */
+
+/* إخفاء شريط التمرير الأفقي */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* شريط تمرير مخصص */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--theme-bg-secondary); }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--theme-primary), var(--theme-primary-dark));
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--theme-primary-light), var(--theme-primary));
+}
