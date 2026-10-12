@@ -16,19 +16,27 @@ import {
 // الإعدادات
 // ============================================================
 export const initialSettings: StoreSettings = {
-  storeName: 'متجر البيت العصري | إلكترونيات وهدايا ومفروشات',
-  activity: 'أدوات منزلية · إلكترونيات · مفروشات · هدايا وألعاب',
-  phone: '0551234567',
-  address: 'الرياض - طريق الملك عبد العزيز - مجمع الواحة التجاري',
+  storeName: 'مركز البلال',
+  activity: 'أدوات منزلية · إلكترونيات · مفروشات · هدايا',
+  phone: '775526937',
+  address: 'مارب - شارع الاربعين',
   taxNumber: '310123456700003',
   taxRate: 0.15,
   isTaxEnabled: true,
   baseCurrency: 'SAR',
-  receiptFooterMessage: 'شكراً لزيارتكم متجر البيت العصري! البضاعة المباعة ترد وتستبدل خلال 7 أيام بموجب الفاتورة الأصلية',
+  receiptFooterMessage: 'شكراً لزيارتكم! البضاعة المباعة ترد وتستبدل خلال 7 أيام بموجب الفاتورة الأصلية',
   allowNegativeStock: false,
   printPaperSize: '80mm',
   cloudSyncEnabled: true,
   lastSyncTime: new Date().toISOString(),
+  
+  // ✅ الهوية البصرية
+  logoType: 'emoji',
+  logoEmoji: '🫖',              // يمكن تغييره من الواجهة
+  logoUrl: '',
+  themeColor: '#d4922a',
+  tagline: 'للتجارة العامة',
+}; lastSyncTime: new Date().toISOString(),
 };
 
 // ============================================================
