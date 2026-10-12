@@ -8,6 +8,7 @@ import { CustomersScreen } from './components/customers/CustomersScreen';
 import { SuppliersScreen } from './components/suppliers/SuppliersScreen';
 import { TreasuryReportsScreen } from './components/reports/TreasuryReportsScreen';
 import { SettingsScreen } from './components/settings/SettingsScreen';
+import { AdvancedSettingsScreen } from './components/admin/AdvancedSettingsScreen';
 import { LockScreenModal } from './components/auth/LockScreenModal';
 import { DailyClosingModal } from './components/pos/DailyClosingModal';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
@@ -39,6 +40,7 @@ const AppContent: React.FC = () => {
         {currentTab === 'customers' && <CustomersScreen />}
         {currentTab === 'suppliers' && <SuppliersScreen />}
         {currentTab === 'treasury_reports' && <TreasuryReportsScreen />}
+        {currentTab === 'advanced_settings' && <AdvancedSettingsScreen />}
         {currentTab === 'settings' && <SettingsScreen />}
       </main>
 
