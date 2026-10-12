@@ -1,4 +1,4 @@
-src/components/pos/ProductCard.tsx
+
 import React from 'react';
 import { Scale, Plus } from 'lucide-react';
 import { Product } from '../../types';
