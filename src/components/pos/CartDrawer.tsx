@@ -169,4 +169,29 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onCheck
                     key={m.id}
                     onClick={() => setPaymentMethod(m.id)}
                     disabled={m.id === 'credit' && !selectedCustomerId}
-                    className={`py-2 rounded-xl text-[11px
+                    className={`py-2 rounded-xl text-[11px] font-bold flex flex-col items-center gap-1 transition disabled:opacity-40 ${
+                      isActive
+                        ? 'bg-gradient-to-br from-gold-500 to-gold-700 text-obsidian-950'
+                        : 'bg-obsidian-800 text-slate-300 hover:bg-obsidian-700'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={handleSubmit}
+              className="w-full mt-2 py-3 gold-btn rounded-xl text-sm font-black flex items-center justify-center gap-2"
+            >
+              <Check className="w-4 h-4" />
+              إتمام البيع
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
