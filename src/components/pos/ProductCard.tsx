@@ -58,12 +58,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onPa
         {/* Product name - fixed 2 lines */}
         <h4
           className="font-bold text-white text-[11px] leading-tight mb-1 overflow-hidden"
-          style={{
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            height: '28px',
-          }}
+          ={{
+            style={{ height: '32px' }}
         >
           {product.name}
         </h4>
