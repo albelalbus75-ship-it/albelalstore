@@ -140,8 +140,8 @@ export const POSScreen: React.FC = () => {
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <div className="flex-1 min-w-[200px]">
           <SearchBar
-            ref={searchInputRef}
-            value={searchQuery}
+  inputRef={searchInputRef}
+  value={searchQuery}
             onChange={setSearchQuery}
             onClear={() => searchInputRef.current?.focus()}
             placeholder="ابحث عن منتج... [/ أو F2]"
