@@ -53,7 +53,6 @@ interface StoreContextType {
   setActiveWarehouseId: (id: string) => void;
   isCartOpen: boolean;
   setIsCartOpen: (open: boolean) => void;
-}
 
   // ✅ CRUD المخازن
   addWarehouse: (data: Omit<Warehouse, 'id'>) => Warehouse;
