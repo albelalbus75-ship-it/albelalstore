@@ -1,0 +1,52 @@
+import React from 'react';
+
+interface CategoryStripProps {
+  categories: string[];
+  selected: string;
+  onSelect: (cat: string) => void;
+}
+
+const EMOJI_MAP: Record<string, string> = {
+  'all': '🏪',
+  'أدوات منزلية': '🍴',
+  'إلكترونيات': '📱',
+  'مفروشات': '🛏️',
+  'هدايا': '🎁',
+  'شوايات': '🍖',
+  'مواد غذائية': '🛒',
+};
+
+export const CategoryStrip: React.FC<CategoryStripProps> = ({ categories, selected, onSelect }) => {
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-bold gold-text">الفئات</h3>
+        <button onClick={() => onSelect('all')} className="text-[10px] text-gold-400 hover:text-gold-300 font-semibold">
+          عرض الكل ›
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+        {categories.map((cat) => {
+          const isActive = selected === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => onSelect(cat)}
+              className={`flex-shrink-0 min-w-[100px] px-3 py-3 rounded-2xl border transition-all text-center ${
+                isActive
+                  ? 'bg-gradient-to-br from-gold-600 to-gold-700 border-gold-500 text-obsidian-950 shadow-gold'
+                  : 'bg-obsidian-900/60 border-gold-700/30 text-slate-200 hover:border-gold-500/60'
+              }`}
+            >
+              <div className="text-2xl mb-1">{EMOJI_MAP[cat] || '📦'}</div>
+              <div className={`text-[10px] font-bold truncate ${isActive ? '' : 'text-white'}`}>
+                {cat === 'all' ? 'الكل' : cat}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
