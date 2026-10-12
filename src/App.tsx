@@ -4,11 +4,7 @@ import { Navbar } from './components/Navbar';
 import { BottomNav, NavTab } from './components/BottomNav';
 import { POSScreen } from './components/pos/POSScreen';
 import { InventoryScreen } from './components/inventory/InventoryScreen';
-import { CustomersScreen } from './components/customers/CustomersScreen';
-import { SuppliersScreen } from './components/suppliers/SuppliersScreen';
-import { TreasuryReportsScreen } from './components/reports/TreasuryReportsScreen';
-import { SettingsScreen } from './components/settings/SettingsScreen';
-import { AdvancedSettingsScreen } from './components/admin/AdvancedSettingsScreen';
+import { AccountScreen } from './components/account/AccountScreen';
 import { LockScreenModal } from './components/auth/LockScreenModal';
 import { DailyClosingModal } from './components/pos/DailyClosingModal';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
@@ -21,44 +17,26 @@ const AppContent: React.FC = () => {
   const isOnline = useOnlineStatus();
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none antialiased">
-      {/* Offline Toast Banner */}
+    <div className="min-h-screen bg-obsidian-950 text-slate-100 flex flex-col font-sans select-none antialiased">
       {!isOnline && (
-        <div className="bg-amber-600 text-amber-950 px-3 py-1 text-center text-xs font-bold flex items-center justify-center gap-1.5 shadow-md">
+        <div className="bg-amber-600 text-amber-950 px-3 py-1 text-center text-xs font-bold flex items-center justify-center gap-1.5">
           <WifiOff className="w-3.5 h-3.5" />
-          <span>وضع عدم الاتصال نشط (Offline-First) — جميع البيانات تُحفظ محلياً على جهازك</span>
+          <span>وضع عدم الاتصال نشط — البيانات محفوظة محلياً</span>
         </div>
       )}
 
-      {/* Top App Bar */}
       <Navbar onOpenClosingModal={() => setIsClosingModalOpen(true)} />
 
-      {/* Main Tab Screen Content */}
       <main className="flex-1 overflow-x-hidden">
         {currentTab === 'pos' && <POSScreen />}
         {currentTab === 'inventory' && <InventoryScreen />}
-        {currentTab === 'customers' && <CustomersScreen />}
-        {currentTab === 'suppliers' && <SuppliersScreen />}
-        {currentTab === 'treasury_reports' && <TreasuryReportsScreen />}
-        {currentTab === 'advanced_settings' && <AdvancedSettingsScreen />}
-        {currentTab === 'settings' && <SettingsScreen />}
+        {currentTab === 'cart' && <POSScreen openCart />}
+        {currentTab === 'account' && <AccountScreen />}
       </main>
 
-      {/* Bottom Android Tab Bar */}
-      <BottomNav
-        currentTab={currentTab}
-        onSelectTab={setCurrentTab}
-        cartCount={cart.length}
-      />
-
-      {/* Security PIN Lock Screen */}
+      <BottomNav currentTab={currentTab} onSelectTab={setCurrentTab} cartCount={cart.length} />
       <LockScreenModal />
-
-      {/* Cash Drawer Daily Closing (Z-Report) */}
-      <DailyClosingModal
-        isOpen={isClosingModalOpen}
-        onClose={() => setIsClosingModalOpen(false)}
-      />
+      <DailyClosingModal isOpen={isClosingModalOpen} onClose={() => setIsClosingModalOpen(false)} />
     </div>
   );
 };
