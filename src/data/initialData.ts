@@ -29,8 +29,8 @@ import {
   initialExchangeRates,
   initialSettings,
   initialStaff,
-  initialInvoices,
-  initialJournalEntries,
+    initialInvoices,
+  initialJournalEntries,   // ✅ أضف هذا السطر
 } from '../data/initialData';
 import { posAudio } from '../utils/audio';
 
