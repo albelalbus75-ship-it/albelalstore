@@ -20,3 +20,8 @@ import App from './App.tsx';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(<App />);
+import { AppDataProvider } from './contexts/AppDataContext';
+// ...
+<AppDataProvider>
+  <App />
+</AppDataProvider>
