@@ -6,6 +6,7 @@ import {
   Truck,
   BarChart3,
   Settings,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 export type NavTab =
@@ -14,7 +15,8 @@ export type NavTab =
   | 'customers'
   | 'suppliers'
   | 'treasury_reports'
-  | 'settings';
+  | 'settings'
+  | 'advanced_settings';   // ✅ جديد
 
 interface BottomNavProps {
   currentTab: NavTab;
@@ -29,6 +31,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onSelectTab, c
     { id: 'customers' as NavTab, label: 'العملاء والديون', icon: Users },
     { id: 'suppliers' as NavTab, label: 'المشتريات', icon: Truck },
     { id: 'treasury_reports' as NavTab, label: 'التقارير والمالية', icon: BarChart3 },
+    { id: 'advanced_settings' as NavTab, label: 'متقدم', icon: SlidersHorizontal },  // ✅ جديد
     { id: 'settings' as NavTab, label: 'الإعدادات', icon: Settings },
   ];
 
