@@ -144,6 +144,11 @@ export interface StoreSettings {
   printPaperSize: string;
   cloudSyncEnabled: boolean;
   lastSyncTime: string;
+}  logoUrl?: string;              // رابط الشعار (Base64 أو URL)
+  logoType?: 'image' | 'emoji' | 'svg';  // نوع الشعار
+  logoEmoji?: string;            // إذا كان إيموجي مثل 🫖
+  themeColor?: string;           // لون الثيم (hex)
+  tagline?: string;              // شعار فرعي مثل "للتجارة العامة"
 }
 
 export interface UserStaff {
