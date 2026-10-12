@@ -6,6 +6,7 @@ import {
   Supplier,
   TreasuryAccount,
   Currency,
+  ExchangeRate,
   StoreSettings,
   UserStaff,
   SaleInvoice,
@@ -25,6 +26,7 @@ import {
   initialSuppliers,
   initialTreasuryAccounts,
   initialCurrencies,
+  initialExchangeRates,
   initialSettings,
   initialStaff,
   initialInvoices,
@@ -49,14 +51,20 @@ interface StoreContextType {
   warehouses: Warehouse[];
   activeWarehouseId: string;
   setActiveWarehouseId: (id: string) => void;
-  
+
+  // ✅ CRUD المخازن
+  addWarehouse: (data: Omit<Warehouse, 'id'>) => Warehouse;
+  updateWarehouse: (id: string, updates: Partial<Warehouse>) => void;
+  deleteWarehouse: (id: string) => void;
+  getDefaultWarehouse: () => Warehouse | undefined;
+
   // Products & Inventory
   products: Product[];
   addProduct: (product: Omit<Product, 'id'>) => void;
   updateProduct: (id: string, updates: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
   adjustStock: (productId: string, newStock: number, reason: string) => void;
-  
+
   // Warehouses & Transfers
   transfers: StockTransfer[];
   createTransfer: (fromWarehouseId: string, toWarehouseId: string, items: { productId: string; quantity: number }[], notes?: string) => boolean;
@@ -77,11 +85,7 @@ interface StoreContextType {
   salePriceTier: 'retail' | 'wholesale';
   setSalePriceTier: (tier: 'retail' | 'wholesale') => void;
   invoices: SaleInvoice[];
-  processSale: (
-    paymentMethod: PaymentMethod,
-    paidAmount: number,
-    notes?: string
-  ) => SaleInvoice | null;
+  processSale: (paymentMethod: PaymentMethod, paidAmount: number, notes?: string) => SaleInvoice | null;
   lastInvoice: SaleInvoice | null;
   setLastInvoice: (inv: SaleInvoice | null) => void;
 
@@ -114,6 +118,20 @@ interface StoreContextType {
   exchangeCurrency: (fromId: string, toId: string, fromAmount: number, toAmount: number, exchangeRate: number, notes?: string) => void;
   vouchers: Voucher[];
 
+  // ✅ CRUD العملات
+  addCurrency: (data: Omit<Currency, 'id'>) => Currency;
+  updateCurrency: (id: string, updates: Partial<Currency>) => void;
+  deleteCurrency: (id: string) => void;
+  getBaseCurrency: () => Currency | undefined;
+
+  // ✅ CRUD أسعار الصرف
+  exchangeRates: ExchangeRate[];
+  addExchangeRate: (data: Omit<ExchangeRate, 'id'>) => ExchangeRate;
+  updateExchangeRate: (id: string, updates: Partial<ExchangeRate>) => void;
+  deleteExchangeRate: (id: string) => void;
+  getLatestRate: (currencyId: string) => ExchangeRate | undefined;
+  convertCurrency: (amount: number, fromCurrencyId: string, toCurrencyId: string) => number;
+
   // Daily Closing & Shifts
   currentDailyClosing: DailyClosing | null;
   dailyClosings: DailyClosing[];
@@ -140,6 +158,7 @@ const STORAGE_KEYS = {
   CUSTOMERS: 'motagri_customers',
   SUPPLIERS: 'motagri_suppliers',
   CURRENCIES: 'motagri_currencies',
+  EXCHANGE_RATES: 'motagri_exchange_rates',
   TREASURY: 'motagri_treasury',
   STAFF: 'motagri_staff',
   INVOICES: 'motagri_invoices',
@@ -159,13 +178,20 @@ function loadStored<T>(key: string, fallback: T): T {
   }
 }
 
+const now = () => new Date().toISOString();
+const genId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Store base state
   const [settings, setSettings] = useState<StoreSettings>(() => loadStored(STORAGE_KEYS.SETTINGS, initialSettings));
   const [staff] = useState<UserStaff[]>(() => loadStored(STORAGE_KEYS.STAFF, initialStaff));
   const [currentStaff, setCurrentStaff] = useState<UserStaff>(staff[0]);
   const [isLocked, setIsLocked] = useState<boolean>(false);
-  const [warehouses] = useState<Warehouse[]>(() => loadStored(STORAGE_KEYS.WAREHOUSES, initialWarehouses));
+
+  // ✅ المخازن: حالة قابلة للتعديل (بدل useState للقراءة فقط)
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(() =>
+    loadStored(STORAGE_KEYS.WAREHOUSES, initialWarehouses)
+  );
   const [activeWarehouseId, setActiveWarehouseId] = useState<string>(warehouses[0]?.id || 'w1');
 
   // Products
@@ -176,8 +202,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [customers, setCustomers] = useState<Customer[]>(() => loadStored(STORAGE_KEYS.CUSTOMERS, initialCustomers));
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadStored(STORAGE_KEYS.SUPPLIERS, initialSuppliers));
 
+  // ✅ العملات: حالة قابلة للتعديل
+  const [currencies, setCurrencies] = useState<Currency[]>(() =>
+    loadStored(STORAGE_KEYS.CURRENCIES, initialCurrencies)
+  );
+
+  // ✅ أسعار الصرف: حالة جديدة بالكامل
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>(() =>
+    loadStored(STORAGE_KEYS.EXCHANGE_RATES, initialExchangeRates)
+  );
+
   // Currencies & Treasury
-  const [currencies] = useState<Currency[]>(() => loadStored(STORAGE_KEYS.CURRENCIES, initialCurrencies));
   const [treasuryAccounts, setTreasuryAccounts] = useState<TreasuryAccount[]>(() => loadStored(STORAGE_KEYS.TREASURY, initialTreasuryAccounts));
   const [vouchers, setVouchers] = useState<Voucher[]>(() => loadStored(STORAGE_KEYS.VOUCHERS, []));
 
@@ -197,7 +232,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [currentDailyClosing, setCurrentDailyClosing] = useState<DailyClosing | null>(() => {
     const saved = loadStored<DailyClosing | null>(STORAGE_KEYS.ACTIVE_CLOSING, null);
     if (saved) return saved;
-    // Default open shift
     return {
       id: 'shift-' + Date.now(),
       closingNumber: 'CLS-2026-001',
@@ -223,43 +257,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Journal entries
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => loadStored(STORAGE_KEYS.JOURNAL, initialJournalEntries));
 
-  // Save changes to localStorage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-  }, [settings]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-  }, [products]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
-  }, [customers]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers));
-  }, [suppliers]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TREASURY, JSON.stringify(treasuryAccounts));
-  }, [treasuryAccounts]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(invoices));
-  }, [invoices]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases));
-  }, [purchases]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TRANSFERS, JSON.stringify(transfers));
-  }, [transfers]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.VOUCHERS, JSON.stringify(vouchers));
-  }, [vouchers]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CLOSINGS, JSON.stringify(dailyClosings));
-  }, [dailyClosings]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_CLOSING, JSON.stringify(currentDailyClosing));
-  }, [currentDailyClosing]);
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(journalEntries));
-  }, [journalEntries]);
+  // ============ حفظ تلقائي إلى localStorage ============
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); }, [settings]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); }, [products]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.WAREHOUSES, JSON.stringify(warehouses)); }, [warehouses]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CURRENCIES, JSON.stringify(currencies)); }, [currencies]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.EXCHANGE_RATES, JSON.stringify(exchangeRates)); }, [exchangeRates]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers)); }, [customers]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers)); }, [suppliers]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.TREASURY, JSON.stringify(treasuryAccounts)); }, [treasuryAccounts]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(invoices)); }, [invoices]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases)); }, [purchases]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.TRANSFERS, JSON.stringify(transfers)); }, [transfers]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.VOUCHERS, JSON.stringify(vouchers)); }, [vouchers]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CLOSINGS, JSON.stringify(dailyClosings)); }, [dailyClosings]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.ACTIVE_CLOSING, JSON.stringify(currentDailyClosing)); }, [currentDailyClosing]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(journalEntries)); }, [journalEntries]);
 
   // Unlock with PIN
   const unlockWithPin = (pin: string): boolean => {
@@ -278,12 +291,182 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSettings((prev) => ({ ...prev, ...newSettings }));
   };
 
+  // ============================================================
+  // ✅ CRUD المخازن
+  // ============================================================
+  const addWarehouse = (data: Omit<Warehouse, 'id'>): Warehouse => {
+    const isFirst = warehouses.length === 0;
+    const newWarehouse: Warehouse = {
+      ...data,
+      id: genId('wh'),
+      isDefault: data.isDefault || isFirst,
+    } as Warehouse;
+
+    setWarehouses((prev) => {
+      const cleared = newWarehouse.isDefault
+        ? prev.map((w) => ({ ...w, isDefault: false }))
+        : prev;
+      return [...cleared, newWarehouse];
+    });
+
+    posAudio.playSuccessChime();
+    return newWarehouse;
+  };
+
+  const updateWarehouse = (id: string, updates: Partial<Warehouse>) => {
+    setWarehouses((prev) =>
+      prev.map((w) => {
+        if (w.id !== id) {
+          return updates.isDefault ? { ...w, isDefault: false } : w;
+        }
+        return { ...w, ...updates, id };
+      })
+    );
+  };
+
+  const deleteWarehouse = (id: string) => {
+    const wh = warehouses.find((w) => w.id === id);
+    if (!wh) return;
+    if (wh.isDefault && warehouses.length > 1) {
+      posAudio.playErrorBuzz();
+      alert('لا يمكن حذف المخزن الافتراضي. عيّن مخزناً آخر كافتراضي أولاً.');
+      return;
+    }
+    if (warehouses.length <= 1) {
+      posAudio.playErrorBuzz();
+      alert('لا يمكن حذف المخزن الوحيد في النظام.');
+      return;
+    }
+    setWarehouses((prev) => prev.filter((w) => w.id !== id));
+    if (activeWarehouseId === id) {
+      const remaining = warehouses.filter((w) => w.id !== id);
+      setActiveWarehouseId(remaining[0]?.id || '');
+    }
+    posAudio.playSuccessChime();
+  };
+
+  const getDefaultWarehouse = (): Warehouse | undefined =>
+    warehouses.find((w) => w.isDefault);
+
+  // ============================================================
+  // ✅ CRUD العملات
+  // ============================================================
+  const addCurrency = (data: Omit<Currency, 'id'>): Currency => {
+    const newCurrency: Currency = { ...data, id: genId('cur') } as Currency;
+    setCurrencies((prev) => {
+      const cleared = newCurrency.isBase
+        ? prev.map((c) => ({ ...c, isBase: false }))
+        : prev;
+      return [...cleared, newCurrency];
+    });
+    posAudio.playSuccessChime();
+    return newCurrency;
+  };
+
+  const updateCurrency = (id: string, updates: Partial<Currency>) => {
+    setCurrencies((prev) =>
+      prev.map((c) => {
+        if (c.id !== id) {
+          return updates.isBase ? { ...c, isBase: false } : c;
+        }
+        return { ...c, ...updates, id };
+      })
+    );
+  };
+
+  const deleteCurrency = (id: string) => {
+    const cur = currencies.find((c) => c.id === id);
+    if (!cur) return;
+    if (cur.isBase) {
+      posAudio.playErrorBuzz();
+      alert('لا يمكن حذف العملة الأساسية.');
+      return;
+    }
+    // منع الحذف إذا كانت مستخدمة في أسعار الصرف
+    const usedInRates = exchangeRates.some(
+      (r) => r.currencyId === id || r.baseCurrencyId === id
+    );
+    if (usedInRates) {
+      posAudio.playErrorBuzz();
+      alert('لا يمكن حذف العملة لوجود أسعار صرف مرتبطة بها. احذف أسعار الصرف أولاً.');
+      return;
+    }
+    setCurrencies((prev) => prev.filter((c) => c.id !== id));
+    posAudio.playSuccessChime();
+  };
+
+  const getBaseCurrency = (): Currency | undefined =>
+    currencies.find((c) => c.isBase);
+
+  // ============================================================
+  // ✅ CRUD أسعار الصرف
+  // ============================================================
+  const addExchangeRate = (data: Omit<ExchangeRate, 'id'>): ExchangeRate => {
+    const newRate: ExchangeRate = { ...data, id: genId('fx') } as ExchangeRate;
+    setExchangeRates((prev) => {
+      // تعطيل الأسعار القديمة النشطة لنفس العملة
+      const cleared = prev.map((r) =>
+        r.currencyId === newRate.currencyId && r.isActive
+          ? { ...r, isActive: false }
+          : r
+      );
+      return [...cleared, newRate];
+    });
+    posAudio.playSuccessChime();
+    return newRate;
+  };
+
+  const updateExchangeRate = (id: string, updates: Partial<ExchangeRate>) => {
+    setExchangeRates((prev) => {
+      const target = prev.find((r) => r.id === id);
+      if (!target) return prev;
+      const updatedCurrencyId = updates.currencyId ?? target.currencyId;
+      return prev.map((r) => {
+        // إذا كان التحديث ينشّط هذا السعر، عطّل الآخرين لنفس العملة
+        if (r.id !== id && updates.isActive && r.currencyId === updatedCurrencyId) {
+          return { ...r, isActive: false };
+        }
+        if (r.id === id) return { ...r, ...updates, id };
+        return r;
+      });
+    });
+  };
+
+  const deleteExchangeRate = (id: string) => {
+    setExchangeRates((prev) => prev.filter((r) => r.id !== id));
+    posAudio.playSuccessChime();
+  };
+
+  const getLatestRate = (currencyId: string): ExchangeRate | undefined => {
+    return exchangeRates
+      .filter((r) => r.currencyId === currencyId && r.isActive)
+      .sort(
+        (a, b) =>
+          new Date(b.effectiveDate).getTime() - new Date(a.effectiveDate).getTime()
+      )[0];
+  };
+
+  const convertCurrency = (
+    amount: number,
+    fromCurrencyId: string,
+    toCurrencyId: string
+  ): number => {
+    if (fromCurrencyId === toCurrencyId) return amount;
+    const base = getBaseCurrency();
+    if (!base) return amount;
+
+    const fromRate =
+      fromCurrencyId === base.id ? 1 : getLatestRate(fromCurrencyId)?.rate ?? 1;
+    const toRate =
+      toCurrencyId === base.id ? 1 : getLatestRate(toCurrencyId)?.rate ?? 1;
+
+    if (toRate === 0) return 0;
+    return Number(((amount * fromRate) / toRate).toFixed(4));
+  };
+
   // Product management
   const addProduct = (p: Omit<Product, 'id'>) => {
-    const newProd: Product = {
-      ...p,
-      id: 'p-' + Date.now(),
-    };
+    const newProd: Product = { ...p, id: 'p-' + Date.now() };
     setProducts((prev) => [newProd, ...prev]);
   };
 
@@ -308,7 +491,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return p;
       })
     );
-    // Double entry for inventory adjustment
     if (diff !== 0) {
       const val = Math.abs(diff) * prod.costPrice;
       const isIncrease = diff > 0;
@@ -334,7 +516,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     notes?: string
   ): boolean => {
     if (fromWarehouseId === toWarehouseId) return false;
-    // Check if sufficient stock in fromWarehouse
     for (const it of items) {
       const p = products.find((prod) => prod.id === it.productId);
       const available = p?.warehouseStocks[fromWarehouseId] ?? 0;
@@ -376,7 +557,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!tr || tr.status === newStatus) return;
 
     if (newStatus === 'received' && tr.status !== 'received') {
-      // Execute the actual movement of inventory
       setProducts((prev) =>
         prev.map((p) => {
           const item = tr.items.find((it) => it.productId === p.id);
@@ -415,7 +595,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
   };
 
-  // Debt collection
   const collectDebt = (
     customerId: string,
     amount: number,
@@ -439,29 +618,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       createdByName: currentStaff.name,
     };
 
-    // Update customer balance
     setCustomers((prev) =>
       prev.map((c) => {
         if (c.id === customerId) {
           const curBal = c.balances[currency] || 0;
-          return {
-            ...c,
-            balances: {
-              ...c.balances,
-              [currency]: curBal - amount,
-            },
-          };
+          return { ...c, balances: { ...c.balances, [currency]: curBal - amount } };
         }
         return c;
       })
     );
 
-    // Update treasury account balance
     setTreasuryAccounts((prev) =>
       prev.map((t) => (t.id === treasuryAccountId ? { ...t, balance: t.balance + amount } : t))
     );
 
-    // Add to daily shift if cash
     if (currentDailyClosing) {
       setCurrentDailyClosing((prev) =>
         prev
@@ -474,7 +644,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
     }
 
-    // Double entry
     const entry: JournalEntry = {
       id: 'je-' + Date.now(),
       entryNumber: `JE-RCV-${Date.now().toString().slice(-4)}`,
@@ -539,7 +708,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       notes,
     };
 
-    // Update stock & weighted average cost for each item
     setProducts((prev) =>
       prev.map((p) => {
         const item = items.find((it) => it.productId === p.id);
@@ -548,30 +716,24 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const newTotalCost = currentTotalCost + item.total;
           const newQty = p.stockQuantity + item.quantity;
           const newAvgCost = newQty > 0 ? Number((newTotalCost / newQty).toFixed(2)) : item.costPrice;
-
           const currentWarehouseStock = p.warehouseStocks[activeWarehouseId] || 0;
           return {
             ...p,
             stockQuantity: newQty,
             costPrice: newAvgCost,
-            warehouseStocks: {
-              ...p.warehouseStocks,
-              [activeWarehouseId]: currentWarehouseStock + item.quantity,
-            },
+            warehouseStocks: { ...p.warehouseStocks, [activeWarehouseId]: currentWarehouseStock + item.quantity },
           };
         }
         return p;
       })
     );
 
-    // Update supplier balance if remaining > 0
     if (remainingAmount > 0) {
       setSuppliers((prev) =>
         prev.map((s) => (s.id === supplierId ? { ...s, balance: s.balance + remainingAmount } : s))
       );
     }
 
-    // Update treasury account if paid
     if (paidAmount > 0) {
       const treasuryId = paymentMethod === 'cash' ? 't1' : 't2';
       setTreasuryAccounts((prev) =>
@@ -579,8 +741,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
       if (currentDailyClosing && paymentMethod === 'cash') {
         setCurrentDailyClosing((prev) =>
-          prev
-            ? {
+          prev            ? {
                 ...prev,
                 totalCashExpenses: prev.totalCashExpenses + paidAmount,
                 expectedCash: prev.expectedCash - paidAmount,
@@ -590,7 +751,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
-    // Double entry for purchase
     const entry: JournalEntry = {
       id: 'je-' + Date.now(),
       entryNumber: `JE-PUR-${Date.now().toString().slice(-4)}`,
@@ -670,7 +830,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return voucher;
   };
 
-  // Offset settlement (المقاصة بين عميل ومورد)
   const settleOffset = (customerId: string, supplierId: string, amount: number, notes?: string) => {
     const cust = customers.find((c) => c.id === customerId);
     const supp = suppliers.find((s) => s.id === supplierId);
@@ -680,13 +839,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       prev.map((c) => {
         if (c.id === customerId) {
           const curBal = c.balances[settings.baseCurrency] || 0;
-          return {
-            ...c,
-            balances: {
-              ...c.balances,
-              [settings.baseCurrency]: curBal - amount,
-            },
-          };
+          return { ...c, balances: { ...c.balances, [settings.baseCurrency]: curBal - amount } };
         }
         return c;
       })
@@ -767,8 +920,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const pkg = product.packagings.find((p) => p.id === packagingId);
     const conversionFactor = pkg ? pkg.conversionFactor : 1;
     const unitName = pkg ? pkg.name : product.baseUnit === 'kg' ? 'كجم' : product.baseUnit === 'g' ? 'غرام' : 'قطعة';
-    
-    // Determine price based on priceTier or packaging
+
     let basePrice = product.sellingPrice;
     if (pkg) {
       basePrice = salePriceTier === 'wholesale' ? pkg.wholesalePrice : pkg.sellingPrice;
@@ -778,7 +930,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const finalPrice = customPrice !== undefined ? customPrice : basePrice;
 
     setCart((prev) => {
-      // Find existing item with same packaging and return status
       const existingIdx = prev.findIndex(
         (it) => it.productId === product.id && it.packagingId === packagingId && it.isReturn === isReturn
       );
@@ -877,7 +1028,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSelectedCustomerId(null);
   };
 
-  // Process POS checkout
   const processSale = (
     paymentMethod: PaymentMethod,
     paidAmount: number,
@@ -891,7 +1041,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (hasReturns && hasSales) invoiceType = 'exchange';
     else if (hasReturns && !hasSales) invoiceType = 'return';
 
-    // Calculate subtotal
     const subtotal = cart.reduce((acc, it) => {
       const sign = it.isReturn ? -1 : 1;
       return acc + it.subtotal * sign;
@@ -925,7 +1074,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       notes,
     };
 
-    // Deduct stock for sales, add stock for returns
     setProducts((prev) =>
       prev.map((p) => {
         const cartItems = cart.filter((it) => it.productId === p.id);
@@ -933,46 +1081,32 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           let deltaStock = 0;
           cartItems.forEach((ci) => {
             const baseQty = ci.quantity * ci.conversionFactor;
-            if (ci.isReturn) {
-              deltaStock += baseQty; // returned item comes back
-            } else {
-              deltaStock -= baseQty; // sold item leaves
-            }
+            if (ci.isReturn) deltaStock += baseQty;
+            else deltaStock -= baseQty;
           });
           const currentWStock = p.warehouseStocks[activeWarehouseId] ?? p.stockQuantity;
           return {
             ...p,
             stockQuantity: p.stockQuantity + deltaStock,
-            warehouseStocks: {
-              ...p.warehouseStocks,
-              [activeWarehouseId]: currentWStock + deltaStock,
-            },
+            warehouseStocks: { ...p.warehouseStocks, [activeWarehouseId]: currentWStock + deltaStock },
           };
         }
         return p;
       })
     );
 
-    // Update customer debt if credit sale
     if (selectedCustomerId && remainingAmount > 0) {
       setCustomers((prev) =>
         prev.map((c) => {
           if (c.id === selectedCustomerId) {
             const curBal = c.balances[settings.baseCurrency] || 0;
-            return {
-              ...c,
-              balances: {
-                ...c.balances,
-                [settings.baseCurrency]: curBal + remainingAmount,
-              },
-            };
+            return { ...c, balances: { ...c.balances, [settings.baseCurrency]: curBal + remainingAmount } };
           }
           return c;
         })
       );
     }
 
-    // Update treasury account
     if (paymentMethod !== 'credit' && paidAmount > 0) {
       const treasuryId = paymentMethod === 'cash' ? 't1' : paymentMethod === 'bank' ? 't2' : 't3';
       setTreasuryAccounts((prev) =>
@@ -980,7 +1114,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
     }
 
-    // Update shift closing
     if (currentDailyClosing) {
       setCurrentDailyClosing((prev) => {
         if (!prev) return null;
@@ -999,7 +1132,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
     }
 
-    // Double entry journal
     const entry: JournalEntry = {
       id: 'je-' + Date.now(),
       entryNumber: `JE-INV-${Date.now().toString().slice(-4)}`,
@@ -1022,14 +1154,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return invoice;
   };
 
-  // Daily Closing (Z-Report / Shift End)
   const performDailyClosing = (
     billDenominations: Record<string, number>,
     notes?: string
   ): DailyClosing => {
     if (!currentDailyClosing) throw new Error('لا يوجد وردية نشطة');
 
-    // Calculate actual cash count
     let actualCash = 0;
     Object.entries(billDenominations).forEach(([denom, count]) => {
       actualCash += Number(denom) * count;
@@ -1049,7 +1179,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setDailyClosings((prev) => [closedReport, ...prev]);
 
-    // Record difference in journal if any
     if (cashDiff !== 0) {
       const isSurplus = cashDiff > 0;
       const absDiff = Math.abs(cashDiff);
@@ -1096,21 +1225,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     posAudio.playSuccessChime();
   };
 
-  // Cloud sync simulation
   const cloudSync = async (): Promise<boolean> => {
     return new Promise((resolve) => {
       setTimeout(() => {
-        setSettings((prev) => ({
-          ...prev,
-          lastSyncTime: new Date().toISOString(),
-        }));
+        setSettings((prev) => ({ ...prev, lastSyncTime: new Date().toISOString() }));
         posAudio.playSuccessChime();
         resolve(true);
       }, 1000);
     });
   };
 
-  // Export encrypted/structured JSON backup
   const exportBackup = (): string => {
     const data = {
       version: '1.0',
@@ -1119,6 +1243,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       settings,
       products,
       warehouses,
+      currencies,
+      exchangeRates,
       transfers,
       customers,
       suppliers,
@@ -1139,6 +1265,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (data.customers && Array.isArray(data.customers)) setCustomers(data.customers);
       if (data.suppliers && Array.isArray(data.suppliers)) setSuppliers(data.suppliers);
       if (data.settings) setSettings(data.settings);
+      if (data.warehouses && Array.isArray(data.warehouses)) setWarehouses(data.warehouses);
+      if (data.currencies && Array.isArray(data.currencies)) setCurrencies(data.currencies);
+      if (data.exchangeRates && Array.isArray(data.exchangeRates)) setExchangeRates(data.exchangeRates);
       if (data.invoices && Array.isArray(data.invoices)) setInvoices(data.invoices);
       if (data.purchases && Array.isArray(data.purchases)) setPurchases(data.purchases);
       if (data.treasuryAccounts && Array.isArray(data.treasuryAccounts)) setTreasuryAccounts(data.treasuryAccounts);
@@ -1153,6 +1282,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const resetAllData = () => {
     localStorage.clear();
     setProducts(initialProducts);
+    setWarehouses(initialWarehouses);
+    setCurrencies(initialCurrencies);
+    setExchangeRates(initialExchangeRates);
     setCustomers(initialCustomers);
     setSuppliers(initialSuppliers);
     setTreasuryAccounts(initialTreasuryAccounts);
@@ -1180,6 +1312,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         warehouses,
         activeWarehouseId,
         setActiveWarehouseId,
+        // ✅ CRUD المخازن
+        addWarehouse,
+        updateWarehouse,
+        deleteWarehouse,
+        getDefaultWarehouse,
+        // Products & Inventory
         products,
         addProduct,
         updateProduct,
@@ -1188,6 +1326,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         transfers,
         createTransfer,
         updateTransferStatus,
+        // POS
         cart,
         addToCart,
         updateCartItemQty,
@@ -1205,10 +1344,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         processSale,
         lastInvoice,
         setLastInvoice,
+        // Customers
         customers,
         addCustomer,
         updateCustomer,
         collectDebt,
+        // Suppliers
         suppliers,
         addSupplier,
         updateSupplier,
@@ -1216,16 +1357,32 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         createPurchaseInvoice,
         paySupplierVoucher,
         settleOffset,
+        // Currencies & Treasury
         currencies,
         treasuryAccounts,
         transferTreasury,
         exchangeCurrency,
         vouchers,
+        // ✅ CRUD العملات
+        addCurrency,
+        updateCurrency,
+        deleteCurrency,
+        getBaseCurrency,
+        // ✅ CRUD أسعار الصرف
+        exchangeRates,
+        addExchangeRate,
+        updateExchangeRate,
+        deleteExchangeRate,
+        getLatestRate,
+        convertCurrency,
+        // Closings
         currentDailyClosing,
         dailyClosings,
         performDailyClosing,
         openNewShift,
+        // Journal
         journalEntries,
+        // System
         cloudSync,
         exportBackup,
         importBackup,
