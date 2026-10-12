@@ -6,6 +6,9 @@ interface CategoryStripProps {
   onSelect: (cat: string) => void;
 }
 
+export const CategoryStrip: React.FC<CategoryStripProps> = ({ ... }) => {
+  // ...
+};
 const EMOJI_MAP: Record<string, string> = {
   'all': '🏪',
   'أدوات منزلية': '🍴',
