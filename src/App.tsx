@@ -11,7 +11,7 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { WifiOff } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { cart } = useStore();
+  const { cart, isCartOpen, setIsCartOpen } = useStore();
   const [currentTab, setCurrentTab] = useState<NavTab>('pos');
   const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
   const isOnline = useOnlineStatus();
@@ -30,11 +30,18 @@ const AppContent: React.FC = () => {
       <main className="flex-1 overflow-x-hidden">
         {currentTab === 'pos' && <POSScreen />}
         {currentTab === 'inventory' && <InventoryScreen />}
-        {currentTab === 'cart' && <POSScreen openCart />}
+        {currentTab === 'cart' && <POSScreen />}
         {currentTab === 'account' && <AccountScreen />}
       </main>
 
-      <BottomNav currentTab={currentTab} onSelectTab={setCurrentTab} cartCount={cart.length} />
+      <BottomNav
+        currentTab={currentTab}
+        onSelectTab={(tab) => {
+          setCurrentTab(tab);
+          if (tab === 'cart') setIsCartOpen(true);
+        }}
+        cartCount={cart.length}
+      />
       <LockScreenModal />
       <DailyClosingModal isOpen={isClosingModalOpen} onClose={() => setIsClosingModalOpen(false)} />
     </div>
