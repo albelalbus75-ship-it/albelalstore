@@ -1,3 +1,4 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
   Product,
   Warehouse,
@@ -9,306 +10,976 @@ import {
   StoreSettings,
   UserStaff,
   SaleInvoice,
+  SaleItem,
+  PurchaseInvoice,
+  PurchaseItem,
+  StockTransfer,
+  Voucher,
   JournalEntry,
+  DailyClosing,
+  PaymentMethod,
 } from '../types';
+import {
+  initialProducts,
+  initialWarehouses,
+  initialCustomers,
+  initialSuppliers,
+  initialTreasuryAccounts,
+  initialCurrencies,
+  initialExchangeRates,
+  initialSettings,
+  initialStaff,
+  initialInvoices,
+  initialJournalEntries,
+} from '../data/initialData';
+import { posAudio } from '../utils/audio';
 
-// ============================================================
-// الإعدادات
-// ============================================================
-export const initialSettings: StoreSettings = {
-  storeName: 'متجر البيت العصري | إلكترونيات وهدايا ومفروشات',
-  activity: 'أدوات منزلية · إلكترونيات · مفروشات · هدايا وألعاب',
-  phone: '0551234567',
-  address: 'الرياض - طريق الملك عبد العزيز - مجمع الواحة التجاري',
-  taxNumber: '310123456700003',
-  taxRate: 0.15,
-  isTaxEnabled: true,
-  baseCurrency: 'SAR',
-  receiptFooterMessage: 'شكراً لزيارتكم متجر البيت العصري! البضاعة المباعة ترد وتستبدل خلال 7 أيام بموجب الفاتورة الأصلية',
-  allowNegativeStock: false,
-  printPaperSize: '80mm',
-  cloudSyncEnabled: true,
-  lastSyncTime: new Date().toISOString(),
+interface CartItem extends SaleItem {
+  maxStock: number;
+}
+
+interface StoreContextType {
+  settings: StoreSettings;
+  updateSettings: (newSettings: Partial<StoreSettings>) => void;
+  staff: UserStaff[];
+  currentStaff: UserStaff;
+  setCurrentStaff: (staff: UserStaff) => void;
+  isLocked: boolean;
+  setIsLocked: (locked: boolean) => void;
+  unlockWithPin: (pin: string) => boolean;
+
+  // المخازن
+  warehouses: Warehouse[];
+  activeWarehouseId: string;
+  setActiveWarehouseId: (id: string) => void;
+  addWarehouse: (data: Omit<Warehouse, 'id' | 'createdAt' | 'updatedAt'>) => Warehouse;
+  updateWarehouse: (id: string, updates: Partial<Warehouse>) => void;
+  deleteWarehouse: (id: string) => void;
+  getDefaultWarehouse: () => Warehouse | undefined;
+
+  // المنتجات
+  products: Product[];
+  addProduct: (product: Omit<Product, 'id'>) => void;
+  updateProduct: (id: string, updates: Partial<Product>) => void;
+  deleteProduct: (id: string) => void;
+  adjustStock: (productId: string, newStock: number, reason: string) => void;
+
+  // التحويلات
+  transfers: StockTransfer[];
+  createTransfer: (fromWarehouseId: string, toWarehouseId: string, items: { productId: string; quantity: number }[], notes?: string) => boolean;
+  updateTransferStatus: (transferId: string, status: StockTransfer['status']) => void;
+
+  // POS
+  cart: CartItem[];
+  addToCart: (product: Product, packagingId?: string, quantity?: number, isReturn?: boolean, customPrice?: number) => void;
+  updateCartItemQty: (index: number, qty: number) => void;
+  updateCartItemDiscount: (index: number, discount: number) => void;
+  updateCartItemPrice: (index: number, price: number) => void;
+  removeFromCart: (index: number) => void;
+  clearCart: () => void;
+  cartDiscount: number;
+  setCartDiscount: (discount: number) => void;
+  selectedCustomerId: string | null;
+  setSelectedCustomerId: (id: string | null) => void;
+  salePriceTier: 'retail' | 'wholesale';
+  setSalePriceTier: (tier: 'retail' | 'wholesale') => void;
+  invoices: SaleInvoice[];
+  processSale: (paymentMethod: PaymentMethod, paidAmount: number, notes?: string) => SaleInvoice | null;
+  lastInvoice: SaleInvoice | null;
+  setLastInvoice: (inv: SaleInvoice | null) => void;
+
+  // العملاء
+  customers: Customer[];
+  addCustomer: (cust: Omit<Customer, 'id' | 'balances'>) => void;
+  updateCustomer: (id: string, updates: Partial<Customer>) => void;
+  collectDebt: (customerId: string, amount: number, currency: string, treasuryAccountId: string, notes?: string) => Voucher;
+
+  // الموردون
+  suppliers: Supplier[];
+  addSupplier: (supp: Omit<Supplier, 'id' | 'balance'>) => void;
+  updateSupplier: (id: string, updates: Partial<Supplier>) => void;
+  purchases: PurchaseInvoice[];
+  createPurchaseInvoice: (supplierId: string, items: PurchaseItem[], paymentMethod: PaymentMethod, paidAmount: number, currency?: string, notes?: string) => PurchaseInvoice;
+  paySupplierVoucher: (supplierId: string, amount: number, currency: string, treasuryAccountId: string, notes?: string) => Voucher;
+  settleOffset: (customerId: string, supplierId: string, amount: number, notes?: string) => void;
+
+  // العملات والخزينة
+  currencies: Currency[];
+  treasuryAccounts: TreasuryAccount[];
+  transferTreasury: (fromId: string, toId: string, amount: number, notes?: string) => void;
+  exchangeCurrency: (fromId: string, toId: string, fromAmount: number, toAmount: number, exchangeRate: number, notes?: string) => void;
+  vouchers: Voucher[];
+
+  // CRUD العملات
+  addCurrency: (data: Omit<Currency, 'id'>) => Currency;
+  updateCurrency: (id: string, updates: Partial<Currency>) => void;
+  deleteCurrency: (id: string) => void;
+  getBaseCurrency: () => Currency | undefined;
+
+  // CRUD أسعار الصرف
+  exchangeRates: ExchangeRate[];
+  addExchangeRate: (data: Omit<ExchangeRate, 'id' | 'createdAt' | 'updatedAt'>) => ExchangeRate;
+  updateExchangeRate: (id: string, updates: Partial<ExchangeRate>) => void;
+  deleteExchangeRate: (id: string) => void;
+  getLatestRate: (currencyId: string) => ExchangeRate | undefined;
+  convertCurrency: (amount: number, fromCurrencyCode: string, toCurrencyCode: string) => number;
+
+  // الورديات
+  currentDailyClosing: DailyClosing | null;
+  dailyClosings: DailyClosing[];
+  performDailyClosing: (billDenominations: Record<string, number>, notes?: string) => DailyClosing;
+  openNewShift: (openingCash: number) => void;
+
+  // القيود
+  journalEntries: JournalEntry[];
+
+  // النظام
+  cloudSync: () => Promise<boolean>;
+  exportBackup: () => string;
+  importBackup: (jsonData: string) => boolean;
+  resetAllData: () => void;
+}
+
+const StoreContext = createContext<StoreContextType | null>(null);
+
+const STORAGE_KEYS = {
+  SETTINGS: 'motagri_settings',
+  PRODUCTS: 'motagri_products',
+  WAREHOUSES: 'motagri_warehouses',
+  TRANSFERS: 'motagri_transfers',
+  CUSTOMERS: 'motagri_customers',
+  SUPPLIERS: 'motagri_suppliers',
+  CURRENCIES: 'motagri_currencies',
+  EXCHANGE_RATES: 'motagri_exchange_rates',
+  TREASURY: 'motagri_treasury',
+  STAFF: 'motagri_staff',
+  INVOICES: 'motagri_invoices',
+  PURCHASES: 'motagri_purchases',
+  VOUCHERS: 'motagri_vouchers',
+  JOURNAL: 'motagri_journal',
+  CLOSINGS: 'motagri_closings',
+  ACTIVE_CLOSING: 'motagri_active_closing',
 };
 
-// ============================================================
-// المخازن (مع الحقول الكاملة)
-// ============================================================
-const ts = new Date().toISOString();
+function loadStored<T>(key: string, fallback: T): T {
+  try {
+    const val = localStorage.getItem(key);
+    return val ? JSON.parse(val) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
-export const initialWarehouses: Warehouse[] = [
-  {
-    id: 'w1',
-    name: 'المعرض الرئيسي (صالة العرض)',
-    code: 'W-SHOWROOM',
-    location: 'الصالة الرئيسية',
-    isActive: true,
-    isDefault: true,
-    createdAt: ts,
-    updatedAt: ts,
-  },
-  {
-    id: 'w2',
-    name: 'مستودع البضائع المركزي',
-    code: 'W-CENTRAL',
-    location: 'المستودع الرئيسي الخلفي',
-    isActive: true,
-    isDefault: false,
-    createdAt: ts,
-    updatedAt: ts,
-  },
-  {
-    id: 'w3',
-    name: 'مستودع التجهيز والشحن',
-    code: 'W-DISPATCH',
-    location: 'قسم الطلبات والتجهيز',
-    isActive: true,
-    isDefault: false,
-    createdAt: ts,
-    updatedAt: ts,
-  },
-];
+const now = () => new Date().toISOString();
+const genId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-// ============================================================
-// الموظفون
-// ============================================================
-export const initialStaff: UserStaff[] = [
-  { id: 'u1', name: 'أبو أحمد (المالك)', role: 'owner', pin: '1111', phone: '0551111111', active: true },
-  { id: 'u2', name: 'سارة - مديرة المعرض', role: 'manager', pin: '2222', phone: '0552222222', active: true },
-  { id: 'u3', name: 'محمد الكاشير', role: 'cashier', pin: '1234', phone: '0553333333', active: true },
-];
+export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [settings, setSettings] = useState<StoreSettings>(() => loadStored(STORAGE_KEYS.SETTINGS, initialSettings));
+  const [staff] = useState<UserStaff[]>(() => loadStored(STORAGE_KEYS.STAFF, initialStaff));
+  const [currentStaff, setCurrentStaff] = useState<UserStaff>(staff[0]);
+  const [isLocked, setIsLocked] = useState<boolean>(false);
 
-// ============================================================
-// العملات (مع id وحقول كاملة)
-// ============================================================
-export const initialCurrencies: Currency[] = [
-  { id: 'cur-sar', code: 'SAR', name: 'ريال سعودي', nameEn: 'Saudi Riyal', symbol: 'ر.س', decimals: 2, rateAgainstBase: 1, isBase: true, isActive: true, createdAt: ts, updatedAt: ts },
-  { id: 'cur-usd', code: 'USD', name: 'دولار أمريكي', nameEn: 'US Dollar', symbol: '$', decimals: 2, rateAgainstBase: 0.267, isBase: false, isActive: true, createdAt: ts, updatedAt: ts },
-  { id: 'cur-aed', code: 'AED', name: 'درهم إماراتي', nameEn: 'UAE Dirham', symbol: 'د.إ', decimals: 2, rateAgainstBase: 0.98, isBase: false, isActive: true, createdAt: ts, updatedAt: ts },
-  { id: 'cur-egp', code: 'EGP', name: 'جنيه مصري', nameEn: 'Egyptian Pound', symbol: 'ج.م', decimals: 2, rateAgainstBase: 13.1, isBase: false, isActive: true, createdAt: ts, updatedAt: ts },
-  { id: 'cur-kwd', code: 'KWD', name: 'دينار كويتي', nameEn: 'Kuwaiti Dinar', symbol: 'د.ك', decimals: 3, rateAgainstBase: 0.082, isBase: false, isActive: true, createdAt: ts, updatedAt: ts },
-  { id: 'cur-yer', code: 'YER', name: 'ريال يمني', nameEn: 'Yemeni Rial', symbol: 'ر.ي', decimals: 2, rateAgainstBase: 68.0, isBase: false, isActive: true, createdAt: ts, updatedAt: ts },
-];
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(() => loadStored(STORAGE_KEYS.WAREHOUSES, initialWarehouses));
+  const [activeWarehouseId, setActiveWarehouseId] = useState<string>(warehouses[0]?.id || 'w1');
 
-// ============================================================
-// ✅ أسعار الصرف (جديد — يحل مشكلة البناء)
-// ============================================================
-export const initialExchangeRates: ExchangeRate[] = [
-  {
-    id: 'fx-usd-sar',
-    currencyId: 'cur-usd',
-    baseCurrencyId: 'cur-sar',
-    rate: 3.75,
-    buyRate: 3.74,
-    sellRate: 3.76,
-    effectiveDate: ts.split('T')[0],
-    source: 'يدوي',
-    isActive: true,
-    createdAt: ts,
-    updatedAt: ts,
-  },
-  {
-    id: 'fx-aed-sar',
-    currencyId: 'cur-aed',
-    baseCurrencyId: 'cur-sar',
-    rate: 1.02,
-    effectiveDate: ts.split('T')[0],
-    source: 'يدوي',
-    isActive: true,
-    createdAt: ts,
-    updatedAt: ts,
-  },
-  {
-    id: 'fx-egp-sar',
-    currencyId: 'cur-egp',
-    baseCurrencyId: 'cur-sar',
-    rate: 0.076,
-    effectiveDate: ts.split('T')[0],
-    source: 'يدوي',
-    isActive: true,
-    createdAt: ts,
-    updatedAt: ts,
-  },
-  {
-    id: 'fx-kwd-sar',
-    currencyId: 'cur-kwd',
-    baseCurrencyId: 'cur-sar',
-    rate: 12.2,
-    effectiveDate: ts.split('T')[0],
-    source: 'يدوي',
-    isActive: true,
-    createdAt: ts,
-    updatedAt: ts,
-  },
-  {
-    id: 'fx-yer-sar',
-    currencyId: 'cur-yer',
-    baseCurrencyId: 'cur-sar',
-    rate: 0.0147,
-    effectiveDate: ts.split('T')[0],
-    source: 'يدوي',
-    isActive: true,
-    createdAt: ts,
-    updatedAt: ts,
-  },
-];
+  const [products, setProducts] = useState<Product[]>(() => loadStored(STORAGE_KEYS.PRODUCTS, initialProducts));
+  const [transfers, setTransfers] = useState<StockTransfer[]>(() => loadStored(STORAGE_KEYS.TRANSFERS, []));
 
-// ============================================================
-// الحسابات الخزينة
-// ============================================================
-export const initialTreasuryAccounts: TreasuryAccount[] = [
-  { id: 't1', name: 'صندوق الكاشير الرئيسي (نقدية)', type: 'cash', currency: 'SAR', balance: 4500 },
-  { id: 't2', name: 'الحساب البنكي (مدى / شبكة)', type: 'bank', currency: 'SAR', balance: 42500, accountNumber: 'SA44800004561234' },
-  { id: 't3', name: 'محفظة STC Pay / إلكترونية', type: 'wallet', currency: 'SAR', balance: 6800, accountNumber: '0551234567' },
-  { id: 't4', name: 'خزينة العملات الأجنبية ($)', type: 'cash', currency: 'USD', balance: 1500 },
-];
+  const [customers, setCustomers] = useState<Customer[]>(() => loadStored(STORAGE_KEYS.CUSTOMERS, initialCustomers));
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadStored(STORAGE_KEYS.SUPPLIERS, initialSuppliers));
 
-// ============================================================
-// المنتجات (كما هي عندك — اختصرتها هنا)
-// ============================================================
-export const initialProducts: Product[] = [
-  {
-    id: 'p1', name: 'طقم قدور جرانيت تركي 9 قطع غير لاصق', code: 'HOM-POTS-01', barcode: '628200100101',
-    category: 'أدوات منزلية', baseUnit: 'piece', costPrice: 180.0, sellingPrice: 260.0, wholesalePrice: 220.0,
-    stockQuantity: 35, minStockAlert: 5, isWeighted: false, warehouseStocks: { w1: 15, w2: 20, w3: 0 },
-    packagings: [{ id: 'pack-pots-1', name: 'كرتون جملة (3 أطقم)', barcode: '628200100102', conversionFactor: 3, sellingPrice: 720, wholesalePrice: 630, costPrice: 540 }],
-  },
-  {
-    id: 'p2', name: 'قلاية هوائية فيليبس رقمية 4.1 لتر', code: 'HOM-AIRFRY-02', barcode: '628200100201',
-    category: 'أدوات منزلية', baseUnit: 'piece', costPrice: 220.0, sellingPrice: 320.0, wholesalePrice: 280.0,
-    stockQuantity: 24, minStockAlert: 4, isWeighted: false, warehouseStocks: { w1: 10, w2: 14, w3: 0 }, packagings: [],
-  },
-  {
-    id: 'p3', name: 'طقم حافظات طعام زجاجية محكمة 5 قطع', code: 'HOM-BOXES-03', barcode: '628200100301',
-    category: 'أدوات منزلية', baseUnit: 'piece', costPrice: 35.0, sellingPrice: 58.0, wholesalePrice: 48.0,
-    stockQuantity: 65, minStockAlert: 10, isWeighted: false, warehouseStocks: { w1: 30, w2: 35, w3: 0 },
-    packagings: [{ id: 'pack-box-1', name: 'كرتون (6 أطقم)', barcode: '628200100302', conversionFactor: 6, sellingPrice: 310, wholesalePrice: 270, costPrice: 210 }],
-  },
-  {
-    id: 'p4', name: 'طقم فناجين قهوة وشاي مذهب كلاسيك 12 قطعة', code: 'HOM-CUPS-04', barcode: '628200100401',
-    category: 'أدوات منزلية', baseUnit: 'piece', costPrice: 45.0, sellingPrice: 79.0, wholesalePrice: 62.0,
-    stockQuantity: 42, minStockAlert: 8, isWeighted: false, warehouseStocks: { w1: 20, w2: 22, w3: 0 }, packagings: [],
-  },
-  {
-    id: 'p5', name: 'سماعة رأس بلوتوث لاسلكية عازلة للضوضاء P9', code: 'ELE-HEAD-01', barcode: '628300200101',
-    category: 'إلكترونيات', baseUnit: 'piece', costPrice: 45.0, sellingPrice: 85.0, wholesalePrice: 65.0,
-    stockQuantity: 55, minStockAlert: 10, isWeighted: false, warehouseStocks: { w1: 25, w2: 30, w3: 0 },
-    packagings: [{ id: 'pack-head-1', name: 'درزن (12 حبة)', barcode: '628300200102', conversionFactor: 12, sellingPrice: 900, wholesalePrice: 740, costPrice: 540 }],
-  },
-  {
-    id: 'p6', name: 'شاحن جداري سريع أنكر 65W بتقنية GaN ثلاثي المنافذ', code: 'ELE-CHARG-02', barcode: '628300200201',
-    category: 'إلكترونيات', baseUnit: 'piece', costPrice: 75.0, sellingPrice: 120.0, wholesalePrice: 98.0,
-    stockQuantity: 40, minStockAlert: 8, isWeighted: false, warehouseStocks: { w1: 18, w2: 22, w3: 0 }, packagings: [],
-  },
-  {
-    id: 'p7', name: 'بنك طاقة محمول 20,000 مللي أمبير مع شحن لاسلكي', code: 'ELE-POWER-03', barcode: '628300200301',
-    category: 'إلكترونيات', baseUnit: 'piece', costPrice: 60.0, sellingPrice: 99.0, wholesalePrice: 80.0,
-    stockQuantity: 38, minStockAlert: 6, isWeighted: false, warehouseStocks: { w1: 18, w2: 20, w3: 0 }, packagings: [],
-  },
-  {
-    id: 'p8', name: 'ساعة ذكية ألترا بشاشة أموليد تدعم المكالمات', code: 'ELE-SMART-04', barcode: '628300200401',
-    category: 'إلكترونيات', baseUnit: 'piece', costPrice: 70.0, sellingPrice: 135.0, wholesalePrice: 105.0,
-    stockQuantity: 28, minStockAlert: 5, isWeighted: false, warehouseStocks: { w1: 12, w2: 16, w3: 0 }, packagings: [],
-  },
-  {
-    id: 'p9', name: 'طقم شرشف سرير قطن مصري فاخر نفرين (4 قطع)', code: 'FUR-SHEET-01', barcode: '628400300101',
-    category: 'مفروشات', baseUnit: 'piece', costPrice: 75.0, sellingPrice: 130.0, wholesalePrice: 105.0,
-    stockQuantity: 32, minStockAlert: 6, isWeighted: false, warehouseStocks: { w1: 14, w2: 18, w3: 0 }, packagings: [],
-  },
-  {
-    id: 'p10', name: 'لحاف سرير فندقي ملكي مزدوج 6 قطع بحشوة مايكروفايبر', code: 'FUR-COMF-02', barcode: '628400300201',
-    category: 'مفروشات', baseUnit: 'piece', costPrice: 165.0, sellingPrice: 255.0, wholesalePrice: 210.0,
-    stockQuantity: 18, minStockAlert: 4, isWeighted: false, warehouseStocks: { w1: 8, w2: 10, w3: 0 }, packagings: [],
-  },
-  {
-    id: 'p11', name: 'وسادة نوم طبية ميموري فوم لدعم الرقبة والعمود الفقري', code: 'FUR-PILL-03', barcode: '628400300301',
-    category: 'مفروشات', baseUnit: 'piece', costPrice: 38.0, sellingPrice: 68.0, wholesalePrice: 52.0,
-    stockQuantity: 50, minStockAlert: 10, isWeighted: false, warehouseStocks: { w1: 22, w2: 28, w3: 0 },
-    packagings: [{ id: 'pack-pill-1', name: 'باكت مزدوج (حبتين)', barcode: '628400300302', conversionFactor: 2, sellingPrice: 120, wholesalePrice: 98, costPrice: 76 }],
-  },
-  {
-    id: 'p12', name: 'بطانية شتوية مخملية دافئة حفر ليزر نفرين 5 كجم', code: 'FUR-BLANK-04', barcode: '628400300401',
-    category: 'مفروشات', baseUnit: 'piece', costPrice: 95.0, sellingPrice: 160.0, wholesalePrice: 130.0,
-    stockQuantity: 26, minStockAlert: 5, isWeighted: false, warehouseStocks: { w1: 12, w2: 14, w3: 0 }, packagings: [],
-  },
-  {
-    id: 'p13', name: 'بوكس هدية ملكي فاخر (ساعة + عطر + محفظة + قلم مذهب)', code: 'GIFT-BOX-01', barcode: '628500400101',
-    category: 'هدايا', baseUnit: 'piece', costPrice: 90.0, sellingPrice: 165.0, wholesalePrice: 130.0,
-    stockQuantity: 25, minStockAlert: 5, isWeighted: false, warehouseStocks: { w1: 12, w2: 13, w3: 0 }, packagings: [],
-  },
-  {
-    id: 'p14', name: 'مج حراري ذكي بشاشة ديجيتال لعرض درجة الحرارة 500 مل', code: 'GIFT-MUG-02', barcode: '628500400201',
-    category: 'هدايا', baseUnit: 'piece', costPrice: 18.0, sellingPrice: 38.0, wholesalePrice: 28.0,
-    stockQuantity: 70, minStockAlert: 15, isWeighted: false, warehouseStocks: { w1: 35, w2: 35, w3: 0 },
-    packagings: [{ id: 'pack-mug-1', name: 'كرتون هدايا (12 مج)', barcode: '628500400202', conversionFactor: 12, sellingPrice: 380, wholesalePrice: 300, costPrice: 216 }],
-  },
-  {
-    id: 'p15', name: 'فواحة عطرية ألتراسونيك ديكورية مع إضاءة لهب دافئة LED', code: 'GIFT-DIFF-03', barcode: '628500400301',
-    category: 'هدايا', baseUnit: 'piece', costPrice: 35.0, sellingPrice: 69.0, wholesalePrice: 52.0,
-    stockQuantity: 36, minStockAlert: 6, isWeighted: false, warehouseStocks: { w1: 18, w2: 18, w3: 0 }, packagings: [],
-  },
-  {
-    id: 'p16', name: 'لعبة روبوت ذكي تفاعلي للأطفال مع تحكم عن بعد', code: 'GIFT-TOY-04', barcode: '628500400401',
-    category: 'هدايا', baseUnit: 'piece', costPrice: 45.0, sellingPrice: 85.0, wholesalePrice: 65.0,
-    stockQuantity: 28, minStockAlert: 5, isWeighted: false, warehouseStocks: { w1: 14, w2: 14, w3: 0 }, packagings: [],
-  },
-];
+  const [currencies, setCurrencies] = useState<Currency[]>(() => loadStored(STORAGE_KEYS.CURRENCIES, initialCurrencies));
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>(() => loadStored(STORAGE_KEYS.EXCHANGE_RATES, initialExchangeRates));
 
-// ============================================================
-// العملاء
-// ============================================================
-export const initialCustomers: Customer[] = [
-  { id: 'c1', name: 'معرض الأناقة للديكور والتجهيزات', phone: '0501234567', address: 'الرياض - حي العليا', taxNumber: '310998877600003', balances: { SAR: 2450, USD: 0 }, creditLimit: 8000, priceTier: 'wholesale', notes: 'عميل جملة دائم - مشتريات هدايا ومفروشات' },
-  { id: 'c2', name: 'خالد بن عبد العزيز (حساب شخصي)', phone: '0567890123', address: 'حي الياسمين - فيلا 12', balances: { SAR: 420 }, creditLimit: 2000, priceTier: 'retail', notes: 'عميل دائم للأدوات المنزلية والإلكترونيات' },
-  { id: 'c3', name: 'مؤسسة إبداع لتجهيز الحفلات والهدايا', phone: '0543216789', address: 'حي النرجس', balances: { SAR: 5800, USD: 250 }, creditLimit: 15000, priceTier: 'wholesale', notes: 'طلبات هدايا ومجسمات بالجملة' },
-  { id: 'c4', name: 'أم عبد الله (دفتر الحساب)', phone: '0559988776', address: 'حي الصحافة', balances: { SAR: 230 }, creditLimit: 1000, priceTier: 'retail', notes: 'مفروشات وأدوات مطبخ' },
-];
+  const [treasuryAccounts, setTreasuryAccounts] = useState<TreasuryAccount[]>(() => loadStored(STORAGE_KEYS.TREASURY, initialTreasuryAccounts));
+  const [vouchers, setVouchers] = useState<Voucher[]>(() => loadStored(STORAGE_KEYS.VOUCHERS, []));
 
-// ============================================================
-// الموردون
-// ============================================================
-export const initialSuppliers: Supplier[] = [
-  { id: 's1', name: 'شركة الروائع للأدوات المنزلية والتجهيزات', company: 'مجموعة الروائع للتجارة الدولية', phone: '0112345678', taxNumber: '300012345600003', balance: 6400, currency: 'SAR', notes: 'مورد أواني الطهي، الأجهزة الصغيرة، والأطقم التركية' },
-  { id: 's2', name: 'مؤسسة النجم الساطع للإلكترونيات الذكية', company: 'النجم الساطع للتقنية والملحقات', phone: '0119876543', taxNumber: '300098765400003', balance: 9800, currency: 'SAR', notes: 'وكيل الشواحن، السماعات، وبنوك الطاقة والساعات الذكية' },
-  { id: 's3', name: 'مصنع الفخامة للمفروشات والمنسوجات', company: 'الفخامة للمفارش والألحفة الفندقية', phone: '0115556677', taxNumber: '300055566600003', balance: 5300, currency: 'SAR', notes: 'مورد المفارش والوسائد والبطانيات الشتوية' },
-  { id: 's4', name: 'شركة لمسات راقية لتوريد الهدايا والتحف', company: 'لمسات راقية للتوزيع والهدايا التذكارية', phone: '0505544332', balance: 3200, currency: 'SAR', notes: 'مورد بوكسات الهدايا، الفواحات، والأكواب الحرارية' },
-];
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartDiscount, setCartDiscount] = useState<number>(0);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [salePriceTier, setSalePriceTier] = useState<'retail' | 'wholesale'>('retail');
+  const [invoices, setInvoices] = useState<SaleInvoice[]>(() => loadStored(STORAGE_KEYS.INVOICES, initialInvoices));
+  const [lastInvoice, setLastInvoice] = useState<SaleInvoice | null>(invoices[0] || null);
 
-// ============================================================
-// الفواتير الأولية
-// ============================================================
-export const initialInvoices: SaleInvoice[] = [
-  {
-    id: 'inv-1001', invoiceNumber: 'INV-2026-001', date: new Date(Date.now() - 3600000 * 2).toISOString(),
-    type: 'sale', customerId: 'c1', customerName: 'معرض الأناقة للديكور والتجهيزات',
-    items: [
-      { productId: 'p1', productName: 'طقم قدور جرانيت تركي 9 قطع غير لاصق', barcode: '628200100101', unitName: 'قطعة', conversionFactor: 1, quantity: 2, unitPrice: 220, costPrice: 180, discount: 0, subtotal: 440 },
-      { productId: 'p13', productName: 'بوكس هدية ملكي فاخر', barcode: '628500400101', unitName: 'قطعة', conversionFactor: 1, quantity: 3, unitPrice: 125, costPrice: 90, discount: 0, subtotal: 375 },
-    ],
-    subtotal: 815.0, discount: 0, taxAmount: 122.25, total: 937.25, paidAmount: 0, remainingAmount: 937.25,
-    paymentMethod: 'credit', currency: 'SAR', warehouseId: 'w1', cashierName: 'محمد الكاشير', notes: 'آجل على حساب المعرض',
-  },
-  {
-    id: 'inv-1002', invoiceNumber: 'INV-2026-002', date: new Date(Date.now() - 3600000 * 1).toISOString(),
-    type: 'sale', customerName: 'زبون نقدي',
-    items: [
-      { productId: 'p5', productName: 'سماعة رأس بلوتوث لاسلكية عازلة للضوضاء P9', barcode: '628300200101', unitName: 'قطعة', conversionFactor: 1, quantity: 1, unitPrice: 85.0, costPrice: 45.0, discount: 0, subtotal: 85.0 },
-      { productId: 'p14', productName: 'مج حراري ذكي بشاشة ديجيتال 500 مل', barcode: '628500400201', unitName: 'قطعة', conversionFactor: 1, quantity: 1, unitPrice: 38.0, costPrice: 18.0, discount: 0, subtotal: 38.0 },
-    ],
-    subtotal: 123.0, discount: 5.0, taxAmount: 17.7, total: 135.7, paidAmount: 150.0, remainingAmount: 0,
-    paymentMethod: 'cash', currency: 'SAR', warehouseId: 'w1', cashierName: 'محمد الكاشير',
-  },
-];
+  const [purchases, setPurchases] = useState<PurchaseInvoice[]>(() => loadStored(STORAGE_KEYS.PURCHASES, []));
 
-// ============================================================
-// القيود المحاسبية الأولية
-// ============================================================
-export const initialJournalEntries: JournalEntry[] = [
-  {
-    id: 'je-1', entryNumber: 'JE-0001', date: new Date().toISOString(),
-    description: 'قيد افتتاحي لرأس المال والمخزون والنقدية - متجر البيت العصري',
-    lines: [
-      { accountId: '101', accountName: 'الصندوق الرئيسي (كاش)', debit: 4500, credit: 0 },
-      { accountId: '102', accountName: 'البنك (حساب جاري)', debit: 42500, credit: 0 },
-      { accountId: '120', accountName: 'مخزون بضاعة أول المدة', debit: 38650, credit: 0 },
-      { accountId: '130', accountName: 'مدينون (ديون العملاء)', debit: 8900, credit: 
+  const [dailyClosings, setDailyClosings] = useState<DailyClosing[]>(() => loadStored(STORAGE_KEYS.CLOSINGS, []));
+  const [currentDailyClosing, setCurrentDailyClosing] = useState<DailyClosing | null>(() => {
+    const saved = loadStored<DailyClosing | null>(STORAGE_KEYS.ACTIVE_CLOSING, null);
+    if (saved) return saved;
+    return {
+      id: 'shift-' + Date.now(),
+      closingNumber: 'CLS-2026-001',
+      date: new Date().toISOString().split('T')[0],
+      shiftStartTime: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+      shiftEndTime: '',
+      cashierName: staff[0]?.name || 'الكاشير',
+      openingCash: 500, totalCashSales: 0, totalCreditSales: 0, totalBankSales: 0,
+      totalReturns: 0, totalCashCollected: 0, totalCashExpenses: 0,
+      expectedCash: 500, actualCashCount: 500, cashDifference: 0,
+      billDenominations: { '100': 3, '50': 2, '10': 10 },
+      isClosed: false,
+    };
+  });
+
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => loadStored(STORAGE_KEYS.JOURNAL, initialJournalEntries));
+
+  // حفظ تلقائي
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); }, [settings]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); }, [products]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.WAREHOUSES, JSON.stringify(warehouses)); }, [warehouses]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CURRENCIES, JSON.stringify(currencies)); }, [currencies]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.EXCHANGE_RATES, JSON.stringify(exchangeRates)); }, [exchangeRates]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers)); }, [customers]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SUPPLIERS, JSON.stringify(suppliers)); }, [suppliers]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.TREASURY, JSON.stringify(treasuryAccounts)); }, [treasuryAccounts]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(invoices)); }, [invoices]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases)); }, [purchases]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.TRANSFERS, JSON.stringify(transfers)); }, [transfers]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.VOUCHERS, JSON.stringify(vouchers)); }, [vouchers]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CLOSINGS, JSON.stringify(dailyClosings)); }, [dailyClosings]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.ACTIVE_CLOSING, JSON.stringify(currentDailyClosing)); }, [currentDailyClosing]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.JOURNAL, JSON.stringify(journalEntries)); }, [journalEntries]);
+
+  // ============================================================
+  // PIN
+  // ============================================================
+  const unlockWithPin = (pin: string): boolean => {
+    const found = staff.find((s) => s.pin === pin);
+    if (found) { setCurrentStaff(found); setIsLocked(false); posAudio.playClick(); return true; }
+    posAudio.playErrorBuzz();
+    return false;
+  };
+
+  const updateSettings = (newSettings: Partial<StoreSettings>) => {
+    setSettings((prev) => ({ ...prev, ...newSettings }));
+  };
+
+  // ============================================================
+  // CRUD المخازن
+  // ============================================================
+  const addWarehouse = (data: Omit<Warehouse, 'id' | 'createdAt' | 'updatedAt'>): Warehouse => {
+    const isFirst = warehouses.length === 0;
+    const ts = now();
+    const newWarehouse: Warehouse = {
+      ...data,
+      id: genId('wh'),
+      isDefault: data.isDefault || isFirst,
+      createdAt: ts,
+      updatedAt: ts,
+    };
+    setWarehouses((prev) => {
+      const cleared = newWarehouse.isDefault ? prev.map((w) => ({ ...w, isDefault: false })) : prev;
+      return [...cleared, newWarehouse];
+    });
+    posAudio.playSuccessChime();
+    return newWarehouse;
+  };
+
+  const updateWarehouse = (id: string, updates: Partial<Warehouse>) => {
+    setWarehouses((prev) =>
+      prev.map((w) => {
+        if (w.id !== id) return updates.isDefault ? { ...w, isDefault: false } : w;
+        return { ...w, ...updates, id, updatedAt: now() };
+      })
+    );
+  };
+
+  const deleteWarehouse = (id: string) => {
+    const wh = warehouses.find((w) => w.id === id);
+    if (!wh) return;
+    if (wh.isDefault && warehouses.length > 1) { posAudio.playErrorBuzz(); alert('لا يمكن حذف المخزن الافتراضي.'); return; }
+    if (warehouses.length <= 1) { posAudio.playErrorBuzz(); alert('لا يمكن حذف المخزن الوحيد.'); return; }
+    setWarehouses((prev) => prev.filter((w) => w.id !== id));
+    if (activeWarehouseId === id) {
+      const remaining = warehouses.filter((w) => w.id !== id);
+      setActiveWarehouseId(remaining[0]?.id || '');
+    }
+    posAudio.playSuccessChime();
+  };
+
+  const getDefaultWarehouse = (): Warehouse | undefined => warehouses.find((w) => w.isDefault);
+
+  // ============================================================
+  // CRUD العملات
+  // ============================================================
+  const addCurrency = (data: Omit<Currency, 'id'>): Currency => {
+    const ts = now();
+    const newCurrency: Currency = { ...data, id: genId('cur'), createdAt: ts, updatedAt: ts };
+    setCurrencies((prev) => {
+      const cleared = newCurrency.isBase ? prev.map((c) => ({ ...c, isBase: false })) : prev;
+      return [...cleared, newCurrency];
+    });
+    posAudio.playSuccessChime();
+    return newCurrency;
+  };
+
+  const updateCurrency = (id: string, updates: Partial<Currency>) => {
+    setCurrencies((prev) =>
+      prev.map((c) => {
+        if (c.id !== id) return updates.isBase ? { ...c, isBase: false } : c;
+        return { ...c, ...updates, id, updatedAt: now() };
+      })
+    );
+  };
+
+  const deleteCurrency = (id: string) => {
+    const cur = currencies.find((c) => c.id === id);
+    if (!cur) return;
+    if (cur.isBase) { posAudio.playErrorBuzz(); alert('لا يمكن حذف العملة الأساسية.'); return; }
+    const usedInRates = exchangeRates.some((r) => r.currencyId === id || r.baseCurrencyId === id);
+    if (usedInRates) { posAudio.playErrorBuzz(); alert('لا يمكن حذف العملة لوجود أسعار صرف مرتبطة.'); return; }
+    setCurrencies((prev) => prev.filter((c) => c.id !== id));
+    posAudio.playSuccessChime();
+  };
+
+  const getBaseCurrency = (): Currency | undefined => currencies.find((c) => c.isBase);
+
+  // ============================================================
+  // CRUD أسعار الصرف
+  // ============================================================
+  const addExchangeRate = (data: Omit<ExchangeRate, 'id' | 'createdAt' | 'updatedAt'>): ExchangeRate => {
+    const ts = now();
+    const newRate: ExchangeRate = { ...data, id: genId('fx'), createdAt: ts, updatedAt: ts };
+    setExchangeRates((prev) => {
+      const cleared = prev.map((r) =>
+        r.currencyId === newRate.currencyId && r.isActive ? { ...r, isActive: false } : r
+      );
+      return [...cleared, newRate];
+    });
+    posAudio.playSuccessChime();
+    return newRate;
+  };
+
+  const updateExchangeRate = (id: string, updates: Partial<ExchangeRate>) => {
+    setExchangeRates((prev) => {
+      const target = prev.find((r) => r.id === id);
+      if (!target) return prev;
+      const updatedCurrencyId = updates.currencyId ?? target.currencyId;
+      return prev.map((r) => {
+        if (r.id !== id && updates.isActive && r.currencyId === updatedCurrencyId) {
+          return { ...r, isActive: false };
+        }
+        if (r.id === id) return { ...r, ...updates, id, updatedAt: now() };
+        return r;
+      });
+    });
+  };
+
+  const deleteExchangeRate = (id: string) => {
+    setExchangeRates((prev) => prev.filter((r) => r.id !== id));
+    posAudio.playSuccessChime();
+  };
+
+  const getLatestRate = (currencyId: string): ExchangeRate | undefined => {
+    return exchangeRates
+      .filter((r) => r.currencyId === currencyId && r.isActive)
+      .sort((a, b) => new Date(b.effectiveDate).getTime() - new Date(a.effectiveDate).getTime())[0];
+  };
+
+  // ✅ يعتمد على code العملة (SAR, USD ...) لأن settings.baseCurrency يستخدم code
+  const convertCurrency = (amount: number, fromCurrencyCode: string, toCurrencyCode: string): number => {
+    if (fromCurrencyCode === toCurrencyCode) return amount;
+    const base = getBaseCurrency();
+    if (!base) return amount;
+    if (base.code === fromCurrencyCode) {
+      const to = currencies.find((c) => c.code === toCurrencyCode);
+      if (!to) return amount;
+      const rate = getLatestRate(to.id)?.rate ?? to.rateAgainstBase;
+      return Number((amount * rate).toFixed(4));
+    }
+    if (base.code === toCurrencyCode) {
+      const from = currencies.find((c) => c.code === fromCurrencyCode);
+      if (!from) return amount;
+      const rate = getLatestRate(from.id)?.rate ?? from.rateAgainstBase;
+      return Number((amount / rate).toFixed(4));
+    }
+    const from = currencies.find((c) => c.code === fromCurrencyCode);
+    const to = currencies.find((c) => c.code === toCurrencyCode);
+    if (!from || !to) return amount;
+    const fromRate = getLatestRate(from.id)?.rate ?? from.rateAgainstBase;
+    const toRate = getLatestRate(to.id)?.rate ?? to.rateAgainstBase;
+    if (toRate === 0) return 0;
+    return Number(((amount * fromRate) / toRate).toFixed(4));
+  };
+
+  // ============================================================
+  // المنتجات
+  // ============================================================
+  const addProduct = (p: Omit<Product, 'id'>) => setProducts((prev) => [{ ...p, id: 'p-' + Date.now() }, ...prev]);
+  const updateProduct = (id: string, updates: Partial<Product>) => setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+  const deleteProduct = (id: string) => setProducts((prev) => prev.filter((p) => p.id !== id));
+
+  const adjustStock = (productId: string, newStock: number, reason: string) => {
+    const prod = products.find((p) => p.id === productId);
+    if (!prod) return;
+    const diff = newStock - prod.stockQuantity;
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (p.id === productId) {
+          const wStocks = { ...p.warehouseStocks, [activeWarehouseId]: newStock };
+          return { ...p, stockQuantity: newStock, warehouseStocks: wStocks };
+        }
+        return p;
+      })
+    );
+    if (diff !== 0) {
+      const val = Math.abs(diff) * prod.costPrice;
+      const isIncrease = diff > 0;
+      const entry: JournalEntry = {
+        id: 'je-' + Date.now(),
+        entryNumber: `JE-ADJ-${Date.now().toString().slice(-4)}`,
+        date: now(),
+        description: `تسوية جرد بضاعة: ${prod.name} (${reason})`,
+        lines: [
+          { accountId: '120', accountName: 'المخزون السلعي', debit: isIncrease ? val : 0, credit: !isIncrease ? val : 0 },
+          { accountId: '520', accountName: isIncrease ? 'أرباح تسوية' : 'خسائر تسوية', debit: !isIncrease ? val : 0, credit: isIncrease ? val : 0 },
+        ],
+      };
+      setJournalEntries((prev) => [entry, ...prev]);
+    }
+  };
+
+  // ============================================================
+  // التحويلات
+  // ============================================================
+  const createTransfer = (fromWarehouseId: string, toWarehouseId: string, items: { productId: string; quantity: number }[], notes?: string): boolean => {
+    if (fromWarehouseId === toWarehouseId) return false;
+    for (const it of items) {
+      const p = products.find((prod) => prod.id === it.productId);
+      const available = p?.warehouseStocks[fromWarehouseId] ?? 0;
+      if (available < it.quantity) { posAudio.playErrorBuzz(); return false; }
+    }
+    const transferItems = items.map((it) => {
+      const p = products.find((prod) => prod.id === it.productId)!;
+      return { productId: it.productId, productName: p.name, quantity: it.quantity, unit: p.baseUnit };
+    });
+    const newTransfer: StockTransfer = {
+      id: 'tr-' + Date.now(),
+      transferNumber: `TR-${new Date().getFullYear()}-${(transfers.length + 1).toString().padStart(3, '0')}`,
+      date: now(), fromWarehouseId, toWarehouseId, items: transferItems,
+      status: 'pending', notes, createdByName: currentStaff.name,
+    };
+    setTransfers((prev) => [newTransfer, ...prev]);
+    posAudio.playSuccessChime();
+    return true;
+  };
+
+  const updateTransferStatus = (transferId: string, newStatus: StockTransfer['status']) => {
+    const tr = transfers.find((t) => t.id === transferId);
+    if (!tr || tr.status === newStatus) return;
+    if (newStatus === 'received' && tr.status !== 'received') {
+      setProducts((prev) =>
+        prev.map((p) => {
+          const item = tr.items.find((it) => it.productId === p.id);
+          if (item) {
+            const fromStock = (p.warehouseStocks[tr.fromWarehouseId] || 0) - item.quantity;
+            const toStock = (p.warehouseStocks[tr.toWarehouseId] || 0) + item.quantity;
+            return {
+              ...p,
+              warehouseStocks: { ...p.warehouseStocks, [tr.fromWarehouseId]: Math.max(0, fromStock), [tr.toWarehouseId]: toStock },
+            };
+          }
+          return p;
+        })
+      );
+    }
+    setTransfers((prev) => prev.map((t) => (t.id === transferId ? { ...t, status: newStatus } : t)));
+    posAudio.playSuccessChime();
+  };
+
+  // ============================================================
+  // العملاء
+  // ============================================================
+  const addCustomer = (cust: Omit<Customer, 'id' | 'balances'>) => {
+    const newCust: Customer = { ...cust, id: 'c-' + Date.now(), balances: { [settings.baseCurrency]: 0 } };
+    setCustomers((prev) => [newCust, ...prev]);
+  };
+
+  const updateCustomer = (id: string, updates: Partial<Customer>) => setCustomers((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+
+  const collectDebt = (customerId: string, amount: number, currency: string, treasuryAccountId: string, notes?: string): Voucher => {
+    const cust = customers.find((c) => c.id === customerId);
+    const voucher: Voucher = {
+      id: 'v-' + Date.now(),
+      voucherNumber: `RCV-${Date.now().toString().slice(-5)}`,
+      type: 'receipt', date: now(), partyType: 'customer', partyId: customerId,
+      partyName: cust?.name || 'عميل', amount, currency, treasuryAccountId,
+      notes: notes || 'سداد دفعة من الحساب', createdByName: currentStaff.name,
+    };
+    setCustomers((prev) => prev.map((c) => {
+      if (c.id === customerId) {
+        const curBal = c.balances[currency] || 0;
+        return { ...c, balances: { ...c.balances, [currency]: curBal - amount } };
+      }
+      return c;
+    }));
+    setTreasuryAccounts((prev) => prev.map((t) => (t.id === treasuryAccountId ? { ...t, balance: t.balance + amount } : t)));
+    if (currentDailyClosing) {
+      setCurrentDailyClosing((prev) => prev ? { ...prev, totalCashCollected: prev.totalCashCollected + amount, expectedCash: prev.expectedCash + amount } : null);
+    }
+    const entry: JournalEntry = {
+      id: 'je-' + Date.now(),
+      entryNumber: `JE-RCV-${Date.now().toString().slice(-4)}`,
+      date: now(),
+      description: `سند قبض من العميل: ${cust?.name}`,
+      lines: [
+        { accountId: '101', accountName: 'الصندوق', debit: amount, credit: 0 },
+        { accountId: '130', accountName: `ذمم مدينة (${cust?.name})`, debit: 0, credit: amount },
+      ],
+    };
+    setJournalEntries((prev) => [entry, ...prev]);
+    setVouchers((prev) => [voucher, ...prev]);
+    posAudio.playSuccessChime();
+    return voucher;
+  };
+
+  // ============================================================
+  // الموردون والمشتريات
+  // ============================================================
+  const addSupplier = (supp: Omit<Supplier, 'id' | 'balance'>) => {
+    const newSupp: Supplier = { ...supp, id: 's-' + Date.now(), balance: 0, currency: settings.baseCurrency };
+    setSuppliers((prev) => [newSupp, ...prev]);
+  };
+
+  const updateSupplier = (id: string, updates: Partial<Supplier>) => setSuppliers((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+
+  const createPurchaseInvoice = (supplierId: string, items: PurchaseItem[], paymentMethod: PaymentMethod, paidAmount: number, currency = settings.baseCurrency, notes?: string): PurchaseInvoice => {
+    const supp = suppliers.find((s) => s.id === supplierId);
+    const subtotal = items.reduce((acc, it) => acc + it.total, 0);
+    const taxAmount = settings.isTaxEnabled ? subtotal * settings.taxRate : 0;
+    const total = subtotal + taxAmount;
+    const remainingAmount = Math.max(0, total - paidAmount);
+    const invoice: PurchaseInvoice = {
+      id: 'pur-' + Date.now(),
+      invoiceNumber: `PUR-${new Date().getFullYear()}-${(purchases.length + 1).toString().padStart(4, '0')}`,
+      date: now(), supplierId, supplierName: supp?.name || 'مورد عام',
+      items, subtotal, taxAmount, total, paidAmount, remainingAmount,
+      warehouseId: activeWarehouseId, paymentMethod, currency, notes,
+    };
+    setProducts((prev) => prev.map((p) => {
+      const item = items.find((it) => it.productId === p.id);
+      if (item) {
+        const currentTotalCost = p.stockQuantity * p.costPrice;
+        const newTotalCost = currentTotalCost + item.total;
+        const newQty = p.stockQuantity + item.quantity;
+        const newAvgCost = newQty > 0 ? Number((newTotalCost / newQty).toFixed(2)) : item.costPrice;
+        const currentWarehouseStock = p.warehouseStocks[activeWarehouseId] || 0;
+        return { ...p, stockQuantity: newQty, costPrice: newAvgCost, warehouseStocks: { ...p.warehouseStocks, [activeWarehouseId]: currentWarehouseStock + item.quantity } };
+      }
+      return p;
+    }));
+    if (remainingAmount > 0) setSuppliers((prev) => prev.map((s) => (s.id === supplierId ? { ...s, balance: s.balance + remainingAmount } : s)));
+    if (paidAmount > 0) {
+      const treasuryId = paymentMethod === 'cash' ? 't1' : 't2';
+      setTreasuryAccounts((prev) => prev.map((t) => (t.id === treasuryId ? { ...t, balance: t.balance - paidAmount } : t)));
+      if (currentDailyClosing && paymentMethod === 'cash') {
+        setCurrentDailyClosing((prev) => prev ? { ...prev, totalCashExpenses: prev.totalCashExpenses + paidAmount, expectedCash: prev.expectedCash - paidAmount } : null);
+      }
+    }
+    const entry: JournalEntry = {
+      id: 'je-' + Date.now(),
+      entryNumber: `JE-PUR-${Date.now().toString().slice(-4)}`,
+      date: now(),
+      description: `فاتورة مشتريات ${invoice.invoiceNumber} من ${supp?.name}`,
+      lines: [
+        { accountId: '120', accountName: 'المخزون السلعي', debit: subtotal, credit: 0 },
+        ...(taxAmount > 0 ? [{ accountId: '140', accountName: 'ضريبة مدخلات', debit: taxAmount, credit: 0 }] : []),
+        ...(paidAmount > 0 ? [{ accountId: '101', accountName: 'الصندوق / البنك', debit: 0, credit: paidAmount }] : []),
+        ...(remainingAmount > 0 ? [{ accountId: '201', accountName: `ذمم دائنة (${supp?.name})`, debit: 0, credit: remainingAmount }] : []),
+      ],
+    };
+    setJournalEntries((prev) => [entry, ...prev]);
+    setPurchases((prev) => [invoice, ...prev]);
+    posAudio.playSuccessChime();
+    return invoice;
+  };
+
+  const paySupplierVoucher = (supplierId: string, amount: number, currency: string, treasuryAccountId: string, notes?: string): Voucher => {
+    const supp = suppliers.find((s) => s.id === supplierId);
+    const voucher: Voucher = {
+      id: 'v-' + Date.now(),
+      voucherNumber: `PAY-${Date.now().toString().slice(-5)}`,
+      type: 'payment', date: now(), partyType: 'supplier', partyId: supplierId,
+      partyName: supp?.name || 'مورد', amount, currency, treasuryAccountId,
+      notes: notes || 'سداد دفعة للمورد', createdByName: currentStaff.name,
+    };
+    setSuppliers((prev) => prev.map((s) => (s.id === supplierId ? { ...s, balance: Math.max(0, s.balance - amount) } : s)));
+    setTreasuryAccounts((prev) => prev.map((t) => (t.id === treasuryAccountId ? { ...t, balance: t.balance - amount } : t)));
+    if (currentDailyClosing) {
+      setCurrentDailyClosing((prev) => prev ? { ...prev, totalCashExpenses: prev.totalCashExpenses + amount, expectedCash: prev.expectedCash - amount } : null);
+    }
+    const entry: JournalEntry = {
+      id: 'je-' + Date.now(),
+      entryNumber: `JE-PAY-${Date.now().toString().slice(-4)}`,
+      date: now(),
+      description: `سند صرف للمورد: ${supp?.name}`,
+      lines: [
+        { accountId: '201', accountName: `ذمم دائنة (${supp?.name})`, debit: amount, credit: 0 },
+        { accountId: '101', accountName: 'الصندوق', debit: 0, credit: amount },
+      ],
+    };
+    setJournalEntries((prev) => [entry, ...prev]);
+    setVouchers((prev) => [voucher, ...prev]);
+    posAudio.playSuccessChime();
+    return voucher;
+  };
+
+  const settleOffset = (customerId: string, supplierId: string, amount: number, notes?: string) => {
+    const cust = customers.find((c) => c.id === customerId);
+    const supp = suppliers.find((s) => s.id === supplierId);
+    if (!cust || !supp) return;
+    setCustomers((prev) => prev.map((c) => {
+      if (c.id === customerId) {
+        const curBal = c.balances[settings.baseCurrency] || 0;
+        return { ...c, balances: { ...c.balances, [settings.baseCurrency]: curBal - amount } };
+      }
+      return c;
+    }));
+    setSuppliers((prev) => prev.map((s) => (s.id === supplierId ? { ...s, balance: Math.max(0, s.balance - amount) } : s)));
+    const entry: JournalEntry = {
+      id: 'je-' + Date.now(),
+      entryNumber: `JE-OFFSET-${Date.now().toString().slice(-4)}`,
+      date: now(),
+      description: `مقاصة بين ${cust.name} و ${supp.name}`,
+      lines: [
+        { accountId: '201', accountName: `ذمم دائنة (${supp.name})`, debit: amount, credit: 0 },
+        { accountId: '130', accountName: `ذمم مدينة (${cust.name})`, debit: 0, credit: amount },
+      ],
+    };
+    setJournalEntries((prev) => [entry, ...prev]);
+    posAudio.playSuccessChime();
+  };
+
+  // ============================================================
+  // الخزينة
+  // ============================================================
+  const transferTreasury = (fromId: string, toId: string, amount: number, notes?: string) => {
+    setTreasuryAccounts((prev) => prev.map((t) => {
+      if (t.id === fromId) return { ...t, balance: t.balance - amount };
+      if (t.id === toId) return { ...t, balance: t.balance + amount };
+      return t;
+    }));
+    const fromAcc = treasuryAccounts.find((t) => t.id === fromId);
+    const toAcc = treasuryAccounts.find((t) => t.id === toId);
+    const entry: JournalEntry = {
+      id: 'je-' + Date.now(),
+      entryNumber: `JE-TRF-${Date.now().toString().slice(-4)}`,
+      date: now(),
+      description: `تحويل من [${fromAcc?.name}] إلى [${toAcc?.name}] ${notes || ''}`,
+      lines: [
+        { accountId: '101', accountName: toAcc?.name || 'مستلم', debit: amount, credit: 0 },
+        { accountId: '101', accountName: fromAcc?.name || 'محول', debit: 0, credit: amount },
+      ],
+    };
+    setJournalEntries((prev) => [entry, ...prev]);
+    posAudio.playSuccessChime();
+  };
+
+  const exchangeCurrency = (fromId: string, toId: string, fromAmount: number, toAmount: number, _exchangeRate: number, _notes?: string) => {
+    setTreasuryAccounts((prev) => prev.map((t) => {
+      if (t.id === fromId) return { ...t, balance: t.balance - fromAmount };
+      if (t.id === toId) return { ...t, balance: t.balance + toAmount };
+      return t;
+    }));
+    posAudio.playSuccessChime();
+  };
+
+  // ============================================================
+  // POS
+  // ============================================================
+  const addToCart = (product: Product, packagingId?: string, quantity = 1, isReturn = false, customPrice?: number) => {
+    posAudio.playScanBeep();
+    const pkg = product.packagings.find((p) => p.id === packagingId);
+    const conversionFactor = pkg ? pkg.conversionFactor : 1;
+    const unitName = pkg ? pkg.name : product.baseUnit === 'kg' ? 'كجم' : product.baseUnit === 'g' ? 'غرام' : 'قطعة';
+    let basePrice = product.sellingPrice;
+    if (pkg) basePrice = salePriceTier === 'wholesale' ? pkg.wholesalePrice : pkg.sellingPrice;
+    else basePrice = salePriceTier === 'wholesale' ? product.wholesalePrice : product.sellingPrice;
+    const finalPrice = customPrice !== undefined ? customPrice : basePrice;
+    setCart((prev) => {
+      const existingIdx = prev.findIndex((it) => it.productId === product.id && it.packagingId === packagingId && it.isReturn === isReturn);
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        const existing = updated[existingIdx];
+        const newQty = existing.quantity + quantity;
+        updated[existingIdx] = { ...existing, quantity: newQty, subtotal: Number((newQty * existing.unitPrice - existing.discount).toFixed(2)) };
+        return updated;
+      }
+      const availableStock = product.warehouseStocks[activeWarehouseId] ?? product.stockQuantity;
+      const newItem: CartItem = {
+        productId: product.id, productName: product.name,
+        barcode: pkg ? pkg.barcode : product.barcode,
+        packagingId, unitName, conversionFactor, quantity,
+        isWeighted: product.isWeighted, unitPrice: finalPrice,
+        costPrice: product.costPrice * conversionFactor, discount: 0,
+        subtotal: Number((quantity * finalPrice).toFixed(2)),
+        isReturn, maxStock: availableStock,
+      };
+      return [newItem, ...prev];
+    });
+  };
+
+  const updateCartItemQty = (index: number, qty: number) => {
+    posAudio.playClick();
+    if (qty <= 0) { removeFromCart(index); return; }
+    setCart((prev) => {
+      const updated = [...prev];
+      const item = updated[index];
+      if (!item) return prev;
+      updated[index] = { ...item, quantity: qty, subtotal: Number((qty * item.unitPrice - item.discount).toFixed(2)) };
+      return updated;
+    });
+  };
+
+  const updateCartItemDiscount = (index: number, discount: number) => {
+    setCart((prev) => {
+      const updated = [...prev];
+      const item = updated[index];
+      if (!item) return prev;
+      const safeDiscount = Math.max(0, Math.min(item.quantity * item.unitPrice, discount));
+      updated[index] = { ...item, discount: safeDiscount, subtotal: Number((item.quantity * item.unitPrice - safeDiscount).toFixed(2)) };
+      return updated;
+    });
+  };
+
+  const updateCartItemPrice = (index: number, price: number) => {
+    setCart((prev) => {
+      const updated = [...prev];
+      const item = updated[index];
+      if (!item) return prev;
+      updated[index] = { ...item, unitPrice: price, subtotal: Number((item.quantity * price - item.discount).toFixed(2)) };
+      return updated;
+    });
+  };
+
+  const removeFromCart = (index: number) => { posAudio.playClick(); setCart((prev) => prev.filter((_, i) => i !== index)); };
+  const clearCart = () => { posAudio.playClick(); setCart([]); setCartDiscount(0); setSelectedCustomerId(null); };
+
+  const processSale = (paymentMethod: PaymentMethod, paidAmount: number, notes?: string): SaleInvoice | null => {
+    if (cart.length === 0) return null;
+    const hasReturns = cart.some((it) => it.isReturn);
+    const hasSales = cart.some((it) => !it.isReturn);
+    let invoiceType: SaleInvoice['type'] = 'sale';
+    if (hasReturns && hasSales) invoiceType = 'exchange';
+    else if (hasReturns && !hasSales) invoiceType = 'return';
+    const subtotal = cart.reduce((acc, it) => acc + it.subtotal * (it.isReturn ? -1 : 1), 0);
+    const taxAmount = settings.isTaxEnabled && subtotal > 0 ? Number((subtotal * settings.taxRate).toFixed(2)) : 0;
+    const total = Math.max(0, Number((subtotal + taxAmount - cartDiscount).toFixed(2)));
+    const remainingAmount = paymentMethod === 'credit' ? total : Math.max(0, total - paidAmount);
+    const cust = selectedCustomerId ? customers.find((c) => c.id === selectedCustomerId) : null;
+    const customerName = cust ? cust.name : 'زبون نقدي';
+    const invoice: SaleInvoice = {
+      id: 'inv-' + Date.now(),
+      invoiceNumber: `INV-${new Date().getFullYear()}-${(invoices.length + 1).toString().padStart(4, '0')}`,
+      date: now(), type: invoiceType,
+      customerId: selectedCustomerId || undefined, customerName,
+      items: [...cart], subtotal, discount: cartDiscount, taxAmount, total,
+      paidAmount: paymentMethod === 'credit' ? 0 : paidAmount,
+      remainingAmount, paymentMethod,
+      currency: settings.baseCurrency, warehouseId: activeWarehouseId,
+      cashierName: currentStaff.name, notes,
+    };
+    setProducts((prev) => prev.map((p) => {
+      const cartItems = cart.filter((it) => it.productId === p.id);
+      if (cartItems.length > 0) {
+        let deltaStock = 0;
+        cartItems.forEach((ci) => {
+          const baseQty = ci.quantity * ci.conversionFactor;
+          if (ci.isReturn) deltaStock += baseQty; else deltaStock -= baseQty;
+        });
+        const currentWStock = p.warehouseStocks[activeWarehouseId] ?? p.stockQuantity;
+        return { ...p, stockQuantity: p.stockQuantity + deltaStock, warehouseStocks: { ...p.warehouseStocks, [activeWarehouseId]: currentWStock + deltaStock } };
+      }
+      return p;
+    }));
+    if (selectedCustomerId && remainingAmount > 0) {
+      setCustomers((prev) => prev.map((c) => {
+        if (c.id === selectedCustomerId) {
+          const curBal = c.balances[settings.baseCurrency] || 0;
+          return { ...c, balances: { ...c.balances, [settings.baseCurrency]: curBal + remainingAmount } };
+        }
+        return c;
+      }));
+    }
+    if (paymentMethod !== 'credit' && paidAmount > 0) {
+      const treasuryId = paymentMethod === 'cash' ? 't1' : paymentMethod === 'bank' ? 't2' : 't3';
+      setTreasuryAccounts((prev) => prev.map((t) => (t.id === treasuryId ? { ...t, balance: t.balance + paidAmount } : t)));
+    }
+    if (currentDailyClosing) {
+      setCurrentDailyClosing((prev) => {
+        if (!prev) return null;
+        const isCash = paymentMethod === 'cash';
+        const isCredit = paymentMethod === 'credit';
+        const isBank = paymentMethod === 'bank' || paymentMethod === 'wallet';
+        return {
+          ...prev,
+          totalCashSales: isCash ? prev.totalCashSales + total : prev.totalCashSales,
+          totalCreditSales: isCredit ? prev.totalCreditSales + total : prev.totalCreditSales,
+          totalBankSales: isBank ? prev.totalBankSales + total : prev.totalBankSales,
+          totalReturns: invoiceType === 'return' ? prev.totalReturns + Math.abs(subtotal) : prev.totalReturns,
+          expectedCash: isCash ? prev.expectedCash + total : prev.expectedCash,
+        };
+      });
+    }
+    const entry: JournalEntry = {
+      id: 'je-' + Date.now(),
+      entryNumber: `JE-INV-${Date.now().toString().slice(-4)}`,
+      date: now(),
+      description: `فاتورة ${invoiceType === 'return' ? 'مرتجع' : 'مبيعات'} ${invoice.invoiceNumber}`,
+      lines: [
+        ...(paymentMethod === 'cash' ? [{ accountId: '101', accountName: 'الصندوق', debit: total, credit: 0 }] : []),
+        ...(paymentMethod === 'bank' || paymentMethod === 'wallet' ? [{ accountId: '102', accountName: 'البنك', debit: total, credit: 0 }] : []),
+        ...(paymentMethod === 'credit' ? [{ accountId: '130', accountName: `ذمم مدينة (${customerName})`, debit: total, credit: 0 }] : []),
+        { accountId: '401', accountName: 'إيرادات المبيعات', debit: 0, credit: subtotal },
+        ...(taxAmount > 0 ? [{ accountId: '240', accountName: 'ضريبة مخرجات', debit: 0, credit: taxAmount }] : []),
+      ],
+    };
+    setJournalEntries((prev) => [entry, ...prev]);
+    setInvoices((prev) => [invoice, ...prev]);
+    setLastInvoice(invoice);
+    clearCart();
+    posAudio.playSuccessChime();
+    return invoice;
+  };
+
+  // ============================================================
+  // الورديات
+  // ============================================================
+  const performDailyClosing = (billDenominations: Record<string, number>, notes?: string): DailyClosing => {
+    if (!currentDailyClosing) throw new Error('لا يوجد وردية نشطة');
+    let actualCash = 0;
+    Object.entries(billDenominations).forEach(([denom, count]) => { actualCash += Number(denom) * count; });
+    const cashDiff = actualCash - currentDailyClosing.expectedCash;
+    const closedReport: DailyClosing = {
+      ...currentDailyClosing,
+      shiftEndTime: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+      actualCashCount: actualCash, cashDifference: cashDiff, billDenominations, notes, isClosed: true,
+    };
+    setDailyClosings((prev) => [closedReport, ...prev]);
+    if (cashDiff !== 0) {
+      const isSurplus = cashDiff > 0;
+      const absDiff = Math.abs(cashDiff);
+      const entry: JournalEntry = {
+        id: 'je-' + Date.now(),
+        entryNumber: `JE-CLS-${Date.now().toString().slice(-4)}`,
+        date: now(),
+        description: `فروقات جرد الصندوق ${isSurplus ? 'زيادة' : 'عجز'}`,
+        lines: [
+          { accountId: '101', accountName: 'الصندوق', debit: isSurplus ? absDiff : 0, credit: !isSurplus ? absDiff : 0 },
+          { accountId: '550', accountName: isSurplus ? 'فروقات زيادة' : 'فروقات عجز', debit: !isSurplus ? absDiff : 0, credit: isSurplus ? absDiff : 0 },
+        ],
+      };
+      setJournalEntries((prev) => [entry, ...prev]);
+    }
+    setCurrentDailyClosing(null);
+    posAudio.playSuccessChime();
+    return closedReport;
+  };
+
+  const openNewShift = (openingCash: number) => {
+    const newShift: DailyClosing = {
+      id: 'shift-' + Date.now(),
+      closingNumber: `CLS-${new Date().getFullYear()}-${(dailyClosings.length + 1).toString().padStart(3, '0')}`,
+      date: new Date().toISOString().split('T')[0],
+      shiftStartTime: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+      shiftEndTime: '', cashierName: currentStaff.name, openingCash,
+      totalCashSales: 0, totalCreditSales: 0, totalBankSales: 0, totalReturns: 0,
+      totalCashCollected: 0, totalCashExpenses: 0, expectedCash: openingCash,
+      actualCashCount: openingCash, cashDifference: 0, billDenominations: {}, isClosed: false,
+    };
+    setCurrentDailyClosing(newShift);
+    posAudio.playSuccessChime();
+  };
+
+  // ============================================================
+  // النظام
+  // ============================================================
+  const cloudSync = async (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setTimeout(() => { setSettings((prev) => ({ ...prev, lastSyncTime: now() })); posAudio.playSuccessChime(); resolve(true); }, 1000);
+    });
+  };
+
+  const exportBackup = (): string => {
+    return JSON.stringify({
+      version: '1.0', exportedAt: now(), appName: 'دفتر متجري POS',
+      settings, products, warehouses, currencies, exchangeRates,
+      transfers, customers, suppliers, treasuryAccounts,
+      invoices, purchases, vouchers, journalEntries, dailyClosings,
+    }, null, 2);
+  };
+
+  const importBackup = (jsonData: string): boolean => {
+    try {
+      const data = JSON.parse(jsonData);
+      if (data.products) setProducts(data.products);
+      if (data.customers) setCustomers(data.customers);
+      if (data.suppliers) setSuppliers(data.suppliers);
+      if (data.settings) setSettings(data.settings);
+      if (data.warehouses) setWarehouses(data.warehouses);
+      if (data.currencies) setCurrencies(data.currencies);
+      if (data.exchangeRates) setExchangeRates(data.exchangeRates);
+      if (data.invoices) setInvoices(data.invoices);
+      if (data.purchases) setPurchases(data.purchases);
+      if (data.treasuryAccounts) setTreasuryAccounts(data.treasuryAccounts);
+      posAudio.playSuccessChime();
+      return true;
+    } catch { posAudio.playErrorBuzz(); return false; }
+  };
+
+  const resetAllData = () => {
+    localStorage.clear();
+    setProducts(initialProducts);
+    setWarehouses(initialWarehouses);
+    setCurrencies(initialCurrencies);
+    setExchangeRates(initialExchangeRates);
+    setCustomers(initialCustomers);
+    setSuppliers(initialSuppliers);
+    setTreasuryAccounts(initialTreasuryAccounts);
+    setSettings(initialSettings);
+    setInvoices(initialInvoices);
+    setPurchases([]);
+    setTransfers([]);
+    setVouchers([]);
+    setJournalEntries(initialJournalEntries);
+    setDailyClosings([]);
+    posAudio.playSuccessChime();
+  };
+
+  return (
+    <StoreContext.Provider
+      value={{
+        settings, updateSettings,
+        staff, currentStaff, setCurrentStaff,
+        isLocked, setIsLocked, unlockWithPin,
+        warehouses, activeWarehouseId, setActiveWarehouseId,
+        addWarehouse, updateWarehouse, deleteWarehouse, getDefaultWarehouse,
+        products, addProduct, updateProduct, deleteProduct, adjustStock,
+        transfers, createTransfer, updateTransferStatus,
+        cart, addToCart, updateCartItemQty, updateCartItemDiscount, updateCartItemPrice,
+        removeFromCart, clearCart, cartDiscount, setCartDiscount,
+        selectedCustomerId, setSelectedCustomerId, salePriceTier, setSalePriceTier,
+        invoices, processSale, lastInvoice, setLastInvoice,
+        customers, addCustomer, updateCustomer, collectDebt,
+        suppliers, addSupplier, updateSupplier,
+        purchases, createPurchaseInvoice, paySupplierVoucher, settleOffset,
+        currencies, treasuryAccounts, transferTreasury, exchangeCurrency, vouchers,
+        addCurrency, updateCurrency, deleteCurrency, getBaseCurrency,
+        exchangeRates, addExchangeRate, updateExchangeRate, deleteExchangeRate,
+        getLatestRate, convertCurrency,
+        currentDailyClosing, dailyClosings, performDailyClosing, openNewShift,
+        journalEntries,
+        cloudSync, exportBackup, importBackup, resetAllData,
+      }}
+    >
+      {children}
+    </StoreContext.Provider>
+  );
+};
+
+export const useStore = () => {
+  const context = useContext(StoreContext);
+  if (!context) throw new Error('useStore must be used within a StoreProvider');
+  return context;
+};
